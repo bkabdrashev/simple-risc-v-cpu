@@ -17,3 +17,12 @@ The goal of this Bootcamp is to design RISC-V chip.
 - [x] ROM
 - [x] ALU
 - [x] Register File
+
+## Day 3: 8-bit CPU in Verilog
+
+- [x] PC
+- [x] Instruction Decoder
+- [x] ROM
+- [x] ALU
+- [x] Register File
+- [x] Test Bench

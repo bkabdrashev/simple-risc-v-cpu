@@ -1,5 +1,6 @@
 #include <cstdint>
 #include <assert.h>
+#include <iostream>
 
 #define ERROR_NOT_IMPLEMENTED (0b10100001)
 #define ERROR_INVALID_RANGE   (0b10100010)
@@ -40,10 +41,16 @@ struct inst_size_t {
 };
 
 struct sCPU {
-  addr_size_t pc;
-  reg_size_t regs[N_REGS];
+  struct {
+    addr_size_t pc;
+    reg_size_t regs[N_REGS];
+  } curr;
+  struct {
+    addr_size_t pc;
+    reg_size_t regs[N_REGS];
+    reg_size_t write_data;
+  } prev;
   reg_size_t rom[ROM_SIZE];
-  reg_size_t next_write_data;
 };
 
 struct ALU_out {
@@ -57,7 +64,7 @@ uint8_t take_bit(uint8_t bits, uint8_t pos) {
     return ERROR_INVALID_RANGE;
   }
 
-  uint8_t mask = ~(1u << pos);
+  uint8_t mask = (1u << pos);
   return (bits & mask) >> pos;
 }
 
@@ -99,6 +106,8 @@ ALU_out alu_eval(opcode_size_t opcode, reg_size_t r0, reg_size_t rdata1, reg_siz
     result.result.v = ERROR_NOT_IMPLEMENTED;
   }
   result.is_ner0.v = r0.v != rdata2.v;
+  int a = r0.v;
+  int b = rdata2.v;
   return result;
 }
 
@@ -109,18 +118,20 @@ inst_size_t rom_eval(sCPU* cpu, addr_size_t addr) {
 }
 
 addr_size_t pc_eval(sCPU* cpu, Trigger clock, Trigger reset, addr_size_t in_addr, bit is_jump) {
+  int a = is_jump.v;
+  cpu->prev.pc.v = cpu->curr.pc.v;
   if (is_positive_edge(reset)) {
-    cpu->pc.v = 0;
+    cpu->curr.pc.v = 0;
   }
   else if (is_positive_edge(clock)) {
     if (is_jump.v) {
-      cpu->pc.v = in_addr.v;
+      cpu->curr.pc.v = in_addr.v;
     }
     else {
-      cpu->pc.v++;
+      cpu->curr.pc.v++;
     }
   }
-  return cpu->pc;
+  return cpu->curr.pc;
 }
 
 struct RF_out {
@@ -129,16 +140,30 @@ struct RF_out {
   reg_size_t regs[N_REGS];
 };
 
+void copy_curr_to_prev(sCPU* cpu) {
+  cpu->prev.pc.v = cpu->curr.pc.v;
+  for (int i = 0; i < N_REGS; i++) {
+    cpu->prev.regs[i].v = cpu->curr.regs[i].v;
+  }
+}
+
 RF_out rf_eval(sCPU* cpu, Trigger clock, Trigger reset, bit write_enable, reg_index_t reg_dest, reg_index_t reg_src1, reg_index_t reg_src2, reg_size_t write_data) {
   RF_out out = {};
   if (is_positive_edge(reset)) {
-    cpu->regs[0].v = 0;
-    cpu->regs[1].v = 0;
-    cpu->regs[2].v = 0;
-    cpu->regs[3].v = 0;
+    cpu->curr.regs[0].v = 0;
+    cpu->curr.regs[1].v = 0;
+    cpu->curr.regs[2].v = 0;
+    cpu->curr.regs[3].v = 0;
   }
   else if (is_positive_edge(clock)) {
-    cpu->regs[reg_dest.v] = write_data;
+    if (write_enable.v) {
+      cpu->curr.regs[reg_dest.v] = write_data;
+    }
+  }
+  out.rdata1.v = cpu->prev.regs[reg_src1.v].v;
+  out.rdata2.v = cpu->prev.regs[reg_src2.v].v;
+  for (int i = 0; i < N_REGS; i++) {
+    out.regs[i].v = cpu->prev.regs[i].v;
   }
   return out;
 }
@@ -168,13 +193,14 @@ Dec_out dec_eval(inst_size_t inst) {
 }
 
 void cpu_eval(sCPU* cpu, Trigger clock, Trigger reset) {
-  inst_size_t inst = rom_eval(cpu, cpu->pc);
+  copy_curr_to_prev(cpu);
+  inst_size_t inst = rom_eval(cpu, cpu->prev.pc);
   Dec_out dec_out = dec_eval(inst);
-  RF_out rf_out = rf_eval(cpu, clock, reset, dec_out.write_enable, dec_out.reg_dest, dec_out.reg_src1, dec_out.reg_src2, cpu->next_write_data);
+  RF_out rf_out = rf_eval(cpu, clock, reset, dec_out.write_enable, dec_out.reg_dest, dec_out.reg_src1, dec_out.reg_src2, cpu->prev.write_data);
   uint8_t extend = (0 << 4) | dec_out.imm.v;
   reg_size_t imm_extend = { extend };
-  ALU_out alu_out = alu_eval(dec_out.opcode, rf_out.regs[0], rf_out.rdata1, rf_out.rdata2, imm_extend);
-  cpu->next_write_data = alu_out.result;
+  ALU_out alu_out = alu_eval(dec_out.opcode, cpu->prev.regs[0], rf_out.rdata1, rf_out.rdata2, imm_extend);
+  cpu->prev.write_data = alu_out.result;
   uint8_t opcode_bit_0 = take_bit(dec_out.opcode.v, 0);
   uint8_t opcode_bit_1 = take_bit(dec_out.opcode.v, 1);
   // TODO: check for overflow
@@ -213,12 +239,12 @@ inst_size_t li(uint8_t reg_dest, uint8_t imm_u8) {
 }
 
 inst_size_t inst_bner0(addr_size_t addr, reg_index_t reg_src2) {
-  uint8_t bits = (1 << 7) | (1 << 6) | (addr.v << 4) | reg_src2.v;
+  uint8_t bits = (1 << 7) | (1 << 6) | (addr.v << 2) | reg_src2.v;
   inst_size_t bner0 = { bits };
   return bner0;
 }
 
-inst_size_t bner0(uint8_t addr_u8, uint8_t reg_src2) {
+inst_size_t bner0(uint8_t reg_src2, uint8_t addr_u8) {
   // TODO: check for fit
   addr_size_t addr = {addr_u8};
   reg_index_t  rs2 = {reg_src2};

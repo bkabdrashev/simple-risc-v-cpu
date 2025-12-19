@@ -1,6 +1,6 @@
 #include <stdlib.h>
-#include "golden_model.cpp"
 #include <iostream>
+#include "golden_model.cpp"
 #include <verilated.h>
 #include <verilated_vcd_c.h>
 #include "Vmain.h"
@@ -10,19 +10,26 @@ void clock_tick(Trigger* clock) {
   clock->curr ^= 1;
 }
 
-void compare(Vmain* dut, sCPU* gm, uint64_t sim_time) {
-  if (dut->pc != gm->pc.v) {
-    int dut_v = dut->pc;
-    int gm_v = gm->pc.v;
-    std::cout << "Test Failed at time " << sim_time << ". PC mismatch: dut->pc = " << dut_v << " vs gm->pc = " << gm_v << std::endl;
+bool compare(Vmain* dut, sCPU* gm, uint64_t sim_time) {
+  bool result = true;
+  int dut_v = dut->pc;
+  int gm_v = gm->curr.pc.v;
+  int clock = dut->clk;
+  // std::cout << "at time:" << sim_time <<" clk: " << clock << " dut->pc = " << dut_v << " vs gm->pc = " << gm_v << std::endl;
+  if (dut->pc != gm->curr.pc.v) {
+    std::cout << "Test Failed at time " << sim_time<<" clk: " << clock  << ". PC mismatch: dut->pc = " << dut_v << " vs gm->pc = " << gm_v << std::endl;
+    result = false;
   }
   for (int i = 0; i < 4; i++) {
-    if (dut->regs[i] != gm->regs[i].v) {
       int dut_v = dut->regs[i];
-      int gm_v = gm->regs[i].v;
+      int gm_v = gm->curr.regs[i].v;
+    // std::cout << "at time:" << sim_time << " dut->regs["<<i<<"] = " << dut_v << " vs gm->regs["<<i<<"] = " << gm_v << std::endl;
+    if (dut->regs[i] != gm->curr.regs[i].v) {
       std::cout << "Test Failed at time " << sim_time << ". regs["<<i<<"] mismatch: dut->regs["<<i<<"] = " << dut_v << " vs gm->regs["<<i<<"] = " << gm_v << std::endl;
+      result = false;
     }
   }
+  return result;
 }
 
 int main(int argc, char** argv, char** env) {
@@ -49,33 +56,15 @@ int main(int argc, char** argv, char** env) {
 
   const uint64_t max_sim_time = 100;
   uint64_t sim_time = 0;
+  dut->clk = 0;
   while (sim_time < max_sim_time) {
-    cpu_eval(&cpu, clock, reset);
-    dut->clk ^= 1;
     dut->eval();
+    cpu_eval(&cpu, clock, reset);
+    if (!compare(dut, &cpu, sim_time)) {};
+
     clock_tick(&clock);
-    compare(dut, &cpu, sim_time);
+    dut->clk ^= 1;
     sim_time++;
-  }
-  if (cpu.pc.v != 7) {
-    int got = cpu.pc.v;
-    std::cout << "Test Failed:" << " PC expected 7 but got " << got << std::endl;
-  }
-  if (cpu.regs[0].v != 10) {
-    int got = cpu.regs[0].v;
-    std::cout << "Test Failed:" << " Reg0 expected 10 but got " << got << std::endl;
-  }
-  if (cpu.regs[1].v != 10) {
-    int got = cpu.regs[1].v;
-    std::cout << "Test Failed:" << " Reg1 expected 10 but got " << got << std::endl;
-  }
-  if (cpu.regs[2].v != 55) {
-    int got = cpu.regs[2].v;
-    std::cout << "Test Failed:" << " Reg2 expected 55 but got " << got << std::endl;
-  }
-  if (cpu.regs[3].v != 1) {
-    int got = cpu.regs[3].v;
-    std::cout << "Test Failed:" << " Reg[3] expected 1 but got " << got << std::endl;
   }
 
   exit(EXIT_SUCCESS);

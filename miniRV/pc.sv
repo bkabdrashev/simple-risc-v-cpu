@@ -10,8 +10,7 @@ module pc (
   always_ff @(posedge clk or posedge reset) begin
     if (reset) begin
       next_addr <= 0;
-    end
-    else if (is_addr) begin
+    end else if (is_addr) begin
       next_addr <= in_addr;
     end else begin
       next_addr <= out_addr + 4;

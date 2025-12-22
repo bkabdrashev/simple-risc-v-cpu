@@ -1,4 +1,4 @@
-module mem (
+module ram (
   input  logic        clk,
   input  logic        reset,
   input  logic        wen,

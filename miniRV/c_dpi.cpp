@@ -26,11 +26,12 @@ extern "C" void mem_read(uint32_t address, uint32_t* result) {
 
   }
   else {
-    printf("DUT WARNING: mem_read memory is not mapped: %x\n", address);
+    // printf("DUT WARNING: mem_read memory is not mapped: %x\n", address);
+    *result = 0;
   }
 }
 
-extern "C" void mem_write(uint32_t address, uint32_t write_data, char wstrb) {
+extern "C" void mem_write(uint32_t address, uint32_t write_data, uint8_t wstrb) {
   uint8_t byte0 = (write_data >>  0) & 0xff;
   uint8_t byte1 = (write_data >>  8) & 0xff;
   uint8_t byte2 = (write_data >> 16) & 0xff;
@@ -43,18 +44,17 @@ extern "C" void mem_write(uint32_t address, uint32_t write_data, char wstrb) {
     if (wstrb & (1<<3)) vga[address + 3] = byte3;
   }
   else if (address >= MEM_START && address < MEM_END) {
-    // printf("write: %u %u %u %u [%x] %u %u %u %u\n", wstrb & (1<<0), wstrb & (1<<1), wstrb & (1<<2), wstrb & (1<<3), address, byte0, byte1, byte2, byte3);
-    // getchar();
     if (wstrb & (1<<0)) memory[address + 0] = byte0;
     if (wstrb & (1<<1)) memory[address + 1] = byte1;
     if (wstrb & (1<<2)) memory[address + 2] = byte2;
     if (wstrb & (1<<3)) memory[address + 3] = byte3;
   }
   else {
-    printf("DUT WARNING: mem_write memory is not mapped: %x\n", address);
+    // printf("DUT WARNING: mem_write memory is not mapped: %x\n", address);
   }
 }
 
 extern "C" void mem_reset() {
   memset(memory, 0, MEM_SIZE);
+  memset(vga, 0, VGA_SIZE);
 }

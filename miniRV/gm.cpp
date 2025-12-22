@@ -10,12 +10,14 @@
 #define REG_BITS 32u
 #define BYTE 8u
 #define INST_BITS 32u
+
 #define MEM_START (0x00000000)
 #define MEM_END  (128 * 1024 * 1024)
 #define MEM_SIZE (MEM_END - MEM_START)
 #define VGA_START (0x20000000)
 #define VGA_END  (0x20040000)
 #define VGA_SIZE (VGA_END - VGA_START)
+
 #define N_REGS 16u
 
 #define OPCODE_ADDI  (0b0010011)
@@ -84,6 +86,9 @@ struct miniRV {
   reg_size_t regs[N_REGS];
   byte mem[MEM_SIZE];
   byte vga[VGA_SIZE];
+
+  Trigger clock;
+  Trigger reset;
 };
 
 int32_t sar32(uint32_t u, unsigned shift) {
@@ -166,17 +171,17 @@ inst_size_t gm_mem_read(miniRV* cpu, addr_size_t addr) {
       cpu->mem[addr.v+1].v <<  8 | cpu->mem[addr.v+0].v <<  0 ;
   }
   else {
-    printf("GM WARNING: memory is not mapped\n");
+    // printf("GM WARNING: mem read memory is not mapped\n");
   }
   return result;
 }
 
-void gm_mem_write(miniRV* cpu, Trigger clock, Trigger reset, bit write_enable, bit4 write_enable_bytes, addr_size_t addr, reg_size_t write_data) {
-  if (is_positive_edge(reset)) {
+void gm_mem_write(miniRV* cpu, bit write_enable, bit4 write_enable_bytes, addr_size_t addr, reg_size_t write_data) {
+  if (is_positive_edge(cpu->reset)) {
     memset(cpu->mem, 0, MEM_SIZE);
     memset(cpu->vga, 0, VGA_SIZE);
   }
-  else if (is_positive_edge(clock)) {
+  else if (is_positive_edge(cpu->clock)) {
     if (write_enable.v) {
       if (addr.v >= VGA_START && addr.v < VGA_END) {
         addr.v -= VGA_START;
@@ -208,17 +213,17 @@ void gm_mem_write(miniRV* cpu, Trigger clock, Trigger reset, bit write_enable, b
         }
       }
       else {
-        printf("GM WARNING: memory is not mapped\n");
+        // printf("GM WARNING: mem write memory is not mapped\n");
       }
     }
   }
 }
 
-void pc_write(miniRV* cpu, Trigger clock, Trigger reset, addr_size_t in_addr, bit is_jump) {
-  if (is_positive_edge(reset)) {
+void pc_write(miniRV* cpu, addr_size_t in_addr, bit is_jump) {
+  if (is_positive_edge(cpu->reset)) {
     cpu->pc.v = 0;
   }
-  else if (is_positive_edge(clock)) {
+  else if (is_positive_edge(cpu->clock)) {
     if (is_jump.v) {
       cpu->pc.v = in_addr.v;
     }
@@ -244,13 +249,13 @@ RF_out rf_read(miniRV* cpu, reg_index_t reg_src1, reg_index_t reg_src2) {
   return out;
 }
 
-void rf_write(miniRV* cpu, Trigger clock, Trigger reset, bit write_enable, reg_index_t reg_dest, reg_size_t write_data) {
-  if (is_positive_edge(reset)) {
+void rf_write(miniRV* cpu, bit write_enable, reg_index_t reg_dest, reg_size_t write_data) {
+  if (is_positive_edge(cpu->reset)) {
     for (uint32_t i = 0; i < N_REGS; i++) {
       cpu->regs[i].v = 0;
     }
   }
-  else if (is_positive_edge(clock)) {
+  else if (is_positive_edge(cpu->clock)) {
     if (write_enable.v && reg_dest.v != 0) {
       cpu->regs[reg_dest.v] = write_data;
     }
@@ -322,7 +327,6 @@ Dec_out dec_eval(inst_size_t inst) {
 
 void print_instruction(inst_size_t inst) {
   Dec_out dec = dec_eval(inst);
-  printf("[%x]: ", inst.v);
   switch (dec.opcode.v) {
     case OPCODE_ADDI: {
       printf("addi imm=%i\t rs1=r%u\t rd=r%u\n", dec.imm.v, dec.reg_src1.v, dec.reg_dest.v);
@@ -373,7 +377,7 @@ struct CPU_out {
   reg_size_t  ram_write_data;
 };
 
-CPU_out cpu_eval(miniRV* cpu, Trigger clock, Trigger reset) {
+CPU_out cpu_eval(miniRV* cpu) {
   CPU_out out = {0};
   inst_size_t inst = gm_mem_read(cpu, cpu->pc);
   Dec_out dec_out = dec_eval(inst);
@@ -481,13 +485,13 @@ CPU_out cpu_eval(miniRV* cpu, Trigger clock, Trigger reset) {
   out.ram_addr = ram_addr;
   out.ram_write_data = ram_write_data;
 
-  rf_write(cpu, clock, reset, dec_out.write_enable, dec_out.reg_dest, reg_write_data);
-  gm_mem_write(cpu, clock, reset, ram_write_enable, ram_write_enable_bytes, ram_addr, ram_write_data);
-  pc_write(cpu, clock, reset, in_addr, is_jump);
+  rf_write(cpu, dec_out.write_enable, dec_out.reg_dest, reg_write_data);
+  gm_mem_write(cpu, ram_write_enable, ram_write_enable_bytes, ram_addr, ram_write_data);
+  pc_write(cpu, in_addr, is_jump);
   return out;
 }
 
-void cpu_reset(miniRV* cpu) {
+void cpu_reset_regs(miniRV* cpu) {
   cpu->pc.v = 0;
   for (uint32_t i = 0; i < N_REGS; i++) {
     cpu->regs[i].v = 0;

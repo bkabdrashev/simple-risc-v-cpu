@@ -71,70 +71,70 @@ std::vector<std::uint8_t> read_hex_bytes_one_per_line(const std::string& path) {
   return bytes;
 }
 
-void clock_tick(Trigger* clock) {
-  clock->prev = clock->curr;
-  clock->curr ^= 1;
+void clock_tick(miniRV* cpu) {
+  cpu->clock.prev = cpu->clock.curr;
+  cpu->clock.curr ^= 1;
 }
 
-void reset_dut(VminiRV* dut) {
-  dut->reset = 1;
+void reset_dut_regs(VminiRV* dut) {
+  dut->reg_reset = 1;
   dut->eval();
-  dut->reset = 0;
-  dut->eval();
+  dut->reg_reset = 0;
   dut->clk = 0;
 }
 
-void reset_gm(miniRV* gm, Trigger* clock, Trigger* reset) {
-  cpu_reset(gm);
-  clock->prev = 0;
-  clock->curr = 0;
-  reset->prev = 0;
-  reset->curr = 0;
+void reset_dut_mem(VminiRV* dut) {
+  dut->mem_reset = 1;
+  dut->eval();
+  dut->mem_reset = 0;
+  dut->clk = 0;
+}
+
+void reset_gm_regs(miniRV* gm) {
+  cpu_reset_regs(gm);
+  gm->clock.prev = 0;
+  gm->clock.curr = 0;
+  gm->reset.prev = 0;
+  gm->reset.curr = 0;
 }
 
 void dut_ram_write(uint32_t addr, uint32_t wdata, uint8_t wstrb) {
-  svScope ram_scope = svGetScopeFromName("TOP.miniRV.ram");
-  if (!ram_scope) {
-    std::cerr << "ERROR: svGetScopeFromName(\"TOP.ram\") returned NULL\n";
-    std::exit(1);
-  }
-  svSetScope(ram_scope);
-  VminiRV::sv_mem_write(addr, wdata, wstrb);
-}
-
-void dut_rom_write(uint32_t addr, uint32_t wdata, uint8_t wstrb) {
-  svScope rom_scope = svGetScopeFromName("TOP.miniRV.rom");
-  if (!rom_scope) {
-    std::cerr << "ERROR: svGetScopeFromName(\"TOP.rom\") returned NULL\n";
-    std::exit(1);
-  }
-  svSetScope(rom_scope);
   VminiRV::sv_mem_write(addr, wdata, wstrb);
 }
 
 uint32_t dut_ram_read(uint32_t addr) {
-  svScope ram_scope = svGetScopeFromName("TOP.miniRV.ram");
+  svScope ram_scope = svGetScopeFromName("TOP.miniRV.u_ram");
   if (!ram_scope) {
-    std::cerr << "ERROR: svGetScopeFromName(\"TOP.ram\") returned NULL\n";
+    std::cerr << "ERROR: svGetScopeFromName(\"TOP.miniRV.u_ram\") returned NULL\n";
     std::exit(1);
   }
   svSetScope(ram_scope);
   return VminiRV::sv_mem_read(addr);
 }
 
-uint32_t dut_rom_read(uint32_t addr) {
-  svScope rom_scope = svGetScopeFromName("TOP.miniRV.rom");
+void dut_rom_write(uint32_t addr, uint32_t wdata, uint8_t wstrb) {
+  svScope rom_scope = svGetScopeFromName("TOP.miniRV.u_rom");
   if (!rom_scope) {
-    std::cerr << "ERROR: svGetScopeFromName(\"TOP.rom\") returned NULL\n";
+    std::cerr << "ERROR: svGetScopeFromName(\"TOP.miniRV.u_rom\") returned NULL\n";
     std::exit(1);
   }
   svSetScope(rom_scope);
-  return VminiRV::sv_mem_read(addr);
+  VminiRV::sv_rom_write(addr, wdata, wstrb);
+}
+
+uint32_t dut_rom_read(uint32_t addr) {
+  svScope rom_scope = svGetScopeFromName("TOP.miniRV.u_rom");
+  if (!rom_scope) {
+    std::cerr << "ERROR: svGetScopeFromName(\"TOP.miniRV.u_rom\") returned NULL\n";
+    std::exit(1);
+  }
+  svSetScope(rom_scope);
+  return VminiRV::sv_rom_read(addr);
 }
 
 bool compare_reg(uint64_t sim_time, const char* name, uint32_t dut_v, uint32_t gm_v) {
   if (dut_v != gm_v) {
-  std::cout << "Test Failed at time " << sim_time << ". " << name << " mismatch: dut_v = " << dut_v << " vs gm_v = " << gm_v << std::endl;
+    printf("Test Failed at time %lu. %s mismatch: dut_v = %i vs gm_v = %i\n", sim_time, name, dut_v, gm_v);
     return false;
   }
   return true;
@@ -149,6 +149,14 @@ bool compare(VminiRV* dut, miniRV* gm, uint64_t sim_time) {
     char name[] = {'R', digit1, digit0, '\0'};
     result &= compare_reg(sim_time, name, dut->regs_out[i], gm->regs[i].v);
   }
+  // for (uint32_t i = 0; i < MEM_SIZE; i++) {
+  //   char digit0 = i%10 + '0';
+  //   char digit1 = i/10 + '0';
+  //   char name[] = {'M', digit1, digit0, '\0'};
+  //   uint32_t dut_v = dut_ram_read(i);
+  //   uint32_t gm_v = gm_mem_read(gm, {i}).v;
+  //   result &= compare_reg(sim_time, name, dut_v, gm_v);
+  // }
   return result;
 }
 
@@ -226,64 +234,73 @@ inst_size_t random_instruction(std::mt19937* gen) {
 }
 
 void random_difftest() {
-  VminiRV *dut = new VminiRV;
   miniRV *gm = new miniRV;
+  VminiRV *dut = new VminiRV;
   gm_mem_reset(gm);
-  uint32_t n_inst = 200;
-  inst_size_t* insts = new inst_size_t[n_inst];
+  uint32_t n_insts = 200;
+  inst_size_t* insts = new inst_size_t[n_insts];
   bool test_not_failed = true;
   uint64_t tests_passed = 0;
   uint64_t max_sim_time = 400;
   uint64_t max_tests = 1000;
-  uint64_t seed = hash_uint64_t(std::time(0));
+  // uint64_t seed = hash_uint64_t(std::time(0));
+  // uint64_t seed = 3263282379841580567;
+  uint64_t seed = 10714955119269546755lu;
   do {
+
     printf("======== SEED:%lu ===== %u/%u =========\n", seed, tests_passed, max_tests);
     std::random_device rd;
     std::mt19937 gen(rd());
     gen.seed(seed);
-    for (uint32_t i = 0; i < n_inst; i++) {
+    for (uint32_t i = 0; i < n_insts; i++) {
       inst_size_t inst = random_instruction(&gen);
       insts[i] = inst;
     }
 
-    Trigger clock = {};
-    Trigger reset = {};
-    for (uint32_t i = 0; i < n_inst; i++) {
-      dut_rom_write(i*4, insts[i].v, 0b1111);
-      gm_mem_write(gm, clock, reset, {1}, {1, 1, 1, 1}, {i*4}, insts[i]);
-      clock_tick(&clock);
-      gm_mem_write(gm, clock, reset, {1}, {1, 1, 1, 1}, {i*4}, insts[i]);
-      clock_tick(&clock);
+    dut->clk = 0;
+    dut->rom_wen = 1;
+    for (uint32_t i = 0; i < n_insts; i++) {
+      dut->rom_wdata = insts[i].v;
+      dut->rom_addr = i*4;
+      dut->clk = 0;
+      dut->eval();
+      dut->clk = 1;
+      dut->eval();
+
+      clock_tick(gm);
+      gm_mem_write(gm, {1}, {1, 1, 1, 1}, {4*i}, insts[i]);
+      clock_tick(gm);
     }
-    reset_dut(dut);
-    reset_gm(gm, &clock, &reset);
-    gm_mem_reset(gm);
-    for (uint64_t t = 0; t < max_sim_time && gm->pc.v <= n_inst; t++) {
+    dut->rom_wen = 0;
+    reset_dut_regs(dut);
+    reset_gm_regs(gm);
+    dut->clk = 0;
+    for (uint64_t t = 0; t < max_sim_time && gm->pc.v < n_insts*4; t++) {
       dut->eval();
       inst_size_t inst = gm_mem_read(gm, gm->pc);
-      cpu_eval(gm, clock, reset);
-      test_not_failed &= compare(dut, gm, t);
-      dut->clk ^= 1;
-      clock_tick(&clock);
-      if(!test_not_failed) {
-        for (uint32_t i = 0; i < n_inst; i++) {
-          print_instruction(insts[i]);
-        }
+      cpu_eval(gm);
 
-        printf("[%u] inst: ", t);
+      test_not_failed &= compare(dut, gm, t);
+
+      if (!test_not_failed) {
+        printf("[%u] %u inst: ", t, inst.v);
         print_instruction(inst);
         break;
       }
+
+      clock_tick(gm);
+      dut->clk ^= 1;
     }
-    reset_dut(dut);
-    reset_gm(gm, &clock, &reset);
+    reset_dut_mem(dut);
+    reset_dut_regs(dut);
     gm_mem_reset(gm);
+    reset_gm_regs(gm);
 
     seed = hash_uint64_t(seed);
     if (test_not_failed) {
       tests_passed++;
     }
-  } while (test_not_failed && tests_passed < max_tests);
+  } while (tests_passed < max_tests);
 
 
   std::cout << "Tests results:\n" << tests_passed << " / " << max_tests << " have passed\n";
@@ -337,7 +354,8 @@ void vga_image_test() {
   const uint64_t nbytes = width*height*4;
   char* image = new char[nbytes];
   auto hex_bytes = read_hex_bytes_one_per_line("vga2.hex");
-  reset_dut(dut);
+  reset_dut_mem(dut);
+  reset_dut_regs(dut);
   for (uint32_t i = 0; i < hex_bytes.size(); i++) {
     dut_ram_write(i, hex_bytes[i], 0b0001);
   }
@@ -361,17 +379,15 @@ void vga_image_gm() {
   const uint32_t height = 256;
   const uint32_t nbytes = width*height*4;
   char* image = new char[nbytes];
-  Trigger clock = {};
-  Trigger reset = {};
   auto hex_bytes = read_hex_bytes_one_per_line("vga2.hex");
   gm_mem_reset(gm);
   for (uint32_t i = 0; i < hex_bytes.size(); i++) {
     gm->mem[i].v = hex_bytes[i];
   }
-  reset_gm(gm, &clock, &reset);
+  reset_gm_regs(gm);
   for (uint32_t t = 0; t < 2000000; t++) {
-    cpu_eval(gm, clock, reset);
-    clock_tick(&clock);
+    cpu_eval(gm);
+    clock_tick(gm);
   }
   for (uint32_t i = 0; i < nbytes; i++) {
     image[i] = gm_mem_read(gm, {i+base}).v;
@@ -380,8 +396,8 @@ void vga_image_gm() {
 }
 
 int main(int argc, char** argv, char** env) {
-  // random_difftest();
-  vga_image_test();
+  random_difftest();
+  // vga_image_test();
   // vga_image_gm();
   exit(EXIT_SUCCESS);
 }

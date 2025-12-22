@@ -43,10 +43,17 @@ module miniRV (
     .wen(ram_wen),
     .wdata(ram_wdata),
     .wstrb(ram_wstrb),
-    .rom_addr(pc),
-    .rom_read_data(inst),
-    .ram_addr(ram_addr),
-    .ram_read_data(ram_rdata));
+    .addr(ram_addr),
+    .read_data(ram_rdata));
+
+  mem rom(
+    .clk(clk),
+    .reset(reset),
+    .wen(0),
+    .wdata(0),
+    .wstrb(0),
+    .addr(pc),
+    .read_data(inst));
 
   dec u_dec(
     .inst(inst),

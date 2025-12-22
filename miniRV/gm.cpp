@@ -10,8 +10,12 @@
 #define REG_BITS 32u
 #define BYTE 8u
 #define INST_BITS 32u
-#define ROM_SIZE (0x30000000) // 64K
-#define RAM_SIZE (0x30000000) // 64K
+#define MEM_START (0x00000000)
+#define MEM_END  (128 * 1024 * 1024)
+#define MEM_SIZE (MEM_END - MEM_START)
+#define VGA_START (0x20000000)
+#define VGA_END  (0x20040000)
+#define VGA_SIZE (VGA_END - VGA_START)
 #define N_REGS 16u
 
 #define OPCODE_ADDI  (0b0010011)
@@ -78,8 +82,8 @@ reg_size_t REG_VALUE_0 = {};
 struct miniRV {
   addr_size_t pc;
   reg_size_t regs[N_REGS];
-  byte* rom;
-  byte* ram;
+  byte mem[MEM_SIZE];
+  byte vga[VGA_SIZE];
 };
 
 int32_t sar32(uint32_t u, unsigned shift) {
@@ -143,45 +147,68 @@ reg_size_t alu_eval(opcode_size_t opcode, reg_size_t rdata1, reg_size_t rdata2, 
   return result;
 }
 
-void mem_reset(byte* mem, uint64_t max_size) {
-  for (uint64_t i = 0; i < max_size; i++) {
-    mem[i].v = 0;
-  }
+void gm_mem_reset(miniRV* cpu) {
+  memset(cpu->mem, 0, MEM_SIZE);
+  memset(cpu->vga, 0, VGA_SIZE);
 }
 
-inst_size_t mem_read(byte* mem, addr_size_t addr, uint64_t max_size) {
+inst_size_t gm_mem_read(miniRV* cpu, addr_size_t addr) {
   inst_size_t result = {0};
-  if (addr.v < max_size) {
+  if (addr.v >= VGA_START && addr.v < VGA_END) {
+    addr.v -= VGA_START;
     result.v = 
-      mem[addr.v+3].v << 24 | mem[addr.v+2].v << 16 |
-      mem[addr.v+1].v <<  8 | mem[addr.v+0].v <<  0 ;
+      cpu->vga[addr.v+3].v << 24 | cpu->vga[addr.v+2].v << 16 |
+      cpu->vga[addr.v+1].v <<  8 | cpu->vga[addr.v+0].v <<  0 ;
+  }
+  else if (addr.v >= MEM_START && addr.v < MEM_END) {
+    result.v = 
+      cpu->mem[addr.v+3].v << 24 | cpu->mem[addr.v+2].v << 16 |
+      cpu->mem[addr.v+1].v <<  8 | cpu->mem[addr.v+0].v <<  0 ;
   }
   else {
-    // printf("WARNING: try to access ROM out bounds\n");
+    printf("GM WARNING: memory is not mapped\n");
   }
   return result;
 }
 
-void mem_write(byte* mem, Trigger clock, Trigger reset, bit write_enable, bit4 write_enable_bytes, addr_size_t addr, reg_size_t write_data, uint64_t max_addr_size) {
+void gm_mem_write(miniRV* cpu, Trigger clock, Trigger reset, bit write_enable, bit4 write_enable_bytes, addr_size_t addr, reg_size_t write_data) {
   if (is_positive_edge(reset)) {
-    for (uint32_t i = 0; i < max_addr_size; i++) {
-      mem[i].v = 0;
-    }
+    memset(cpu->mem, 0, MEM_SIZE);
+    memset(cpu->vga, 0, VGA_SIZE);
   }
   else if (is_positive_edge(clock)) {
-    // printf("mem[%x] write: %u\n", addr.v, write_data.v);
-    if (write_enable.v && addr.v < max_addr_size) {
-      if (write_enable_bytes.bits[0].v) {
-        mem[addr.v + 0].v = (write_data.v & (0xff << 0)) >> 0;
+    if (write_enable.v) {
+      if (addr.v >= VGA_START && addr.v < VGA_END) {
+        addr.v -= VGA_START;
+        if (write_enable_bytes.bits[0].v) {
+          cpu->vga[addr.v + 0].v = (write_data.v & (0xff << 0)) >> 0;
+        }
+        if (write_enable_bytes.bits[1].v) {
+          cpu->vga[addr.v + 1].v = (write_data.v & (0xff << 8)) >> 8;
+        }
+        if (write_enable_bytes.bits[2].v) {
+          cpu->vga[addr.v + 2].v = (write_data.v & (0xff << 16)) >> 16;
+        }
+        if (write_enable_bytes.bits[3].v) {
+          cpu->vga[addr.v + 3].v = (write_data.v & (0xff << 24)) >> 24;
+        }
       }
-      if (write_enable_bytes.bits[1].v) {
-        mem[addr.v + 1].v = (write_data.v & (0xff << 8)) >> 8;
+      else if (addr.v >= MEM_START && addr.v < MEM_END) {
+        if (write_enable_bytes.bits[0].v) {
+          cpu->mem[addr.v + 0].v = (write_data.v & (0xff << 0)) >> 0;
+        }
+        if (write_enable_bytes.bits[1].v) {
+          cpu->mem[addr.v + 1].v = (write_data.v & (0xff << 8)) >> 8;
+        }
+        if (write_enable_bytes.bits[2].v) {
+          cpu->mem[addr.v + 2].v = (write_data.v & (0xff << 16)) >> 16;
+        }
+        if (write_enable_bytes.bits[3].v) {
+          cpu->mem[addr.v + 3].v = (write_data.v & (0xff << 24)) >> 24;
+        }
       }
-      if (write_enable_bytes.bits[2].v) {
-        mem[addr.v + 2].v = (write_data.v & (0xff << 16)) >> 16;
-      }
-      if (write_enable_bytes.bits[3].v) {
-        mem[addr.v + 3].v = (write_data.v & (0xff << 24)) >> 24;
+      else {
+        printf("GM WARNING: memory is not mapped\n");
       }
     }
   }
@@ -295,6 +322,7 @@ Dec_out dec_eval(inst_size_t inst) {
 
 void print_instruction(inst_size_t inst) {
   Dec_out dec = dec_eval(inst);
+  printf("[%x]: ", inst.v);
   switch (dec.opcode.v) {
     case OPCODE_ADDI: {
       printf("addi imm=%i\t rs1=r%u\t rd=r%u\n", dec.imm.v, dec.reg_src1.v, dec.reg_dest.v);
@@ -332,7 +360,7 @@ void print_instruction(inst_size_t inst) {
       }
     } break;
     default: { // NOT IMPLEMENTED
-      printf("not implemented:%u\n", inst);
+      printf("GM WARNING: not implemented:0x%x\n", inst);
     } break;
   }
 }
@@ -347,7 +375,7 @@ struct CPU_out {
 
 CPU_out cpu_eval(miniRV* cpu, Trigger clock, Trigger reset) {
   CPU_out out = {0};
-  inst_size_t inst = mem_read(cpu->rom, cpu->pc, ROM_SIZE);
+  inst_size_t inst = gm_mem_read(cpu, cpu->pc);
   Dec_out dec_out = dec_eval(inst);
   RF_out rf_out = rf_read(cpu, dec_out.reg_src1, dec_out.reg_src2);
   reg_size_t alu_out = alu_eval(dec_out.opcode, rf_out.rdata1, rf_out.rdata2, dec_out.imm);
@@ -406,7 +434,7 @@ CPU_out cpu_eval(miniRV* cpu, Trigger clock, Trigger reset) {
     ram_addr.v = rf_out.rdata1.v + dec_out.imm.v;
     ram_write_data.v = 0;
     ram_write_enable_bytes = {0, 0, 0, 0};
-    reg_write_data = mem_read(cpu->ram, ram_addr, RAM_SIZE);
+    reg_write_data = gm_mem_read(cpu, ram_addr);
     in_addr.v = 0;
     is_jump.v = 0;
   }
@@ -416,7 +444,7 @@ CPU_out cpu_eval(miniRV* cpu, Trigger clock, Trigger reset) {
     ram_addr.v = rf_out.rdata1.v + dec_out.imm.v;
     ram_write_data.v = 0;
     ram_write_enable_bytes = {0, 0, 0, 0};
-    reg_write_data.v = mem_read(cpu->ram, ram_addr, RAM_SIZE).v & 0xff;
+    reg_write_data.v = gm_mem_read(cpu, ram_addr).v & 0xff;
     in_addr.v = 0;
     is_jump.v = 0;
   }
@@ -454,7 +482,7 @@ CPU_out cpu_eval(miniRV* cpu, Trigger clock, Trigger reset) {
   out.ram_write_data = ram_write_data;
 
   rf_write(cpu, clock, reset, dec_out.write_enable, dec_out.reg_dest, reg_write_data);
-  mem_write(cpu->ram, clock, reset, ram_write_enable, ram_write_enable_bytes, ram_addr, ram_write_data, RAM_SIZE);
+  gm_mem_write(cpu, clock, reset, ram_write_enable, ram_write_enable_bytes, ram_addr, ram_write_data);
   pc_write(cpu, clock, reset, in_addr, is_jump);
   return out;
 }

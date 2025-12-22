@@ -7,7 +7,6 @@
 #include <verilated.h>
 #include <verilated_vcd_c.h>
 #include "VminiRV.h"
-#include "VminiRV__Dpi.h"
 #include "gm.cpp"
 
 #include <fstream>
@@ -87,11 +86,50 @@ void reset_dut(VminiRV* dut) {
 
 void reset_gm(miniRV* gm, Trigger* clock, Trigger* reset) {
   cpu_reset(gm);
-  // mem_reset(gm->ram, RAM_SIZE);
   clock->prev = 0;
   clock->curr = 0;
   reset->prev = 0;
   reset->curr = 0;
+}
+
+void dut_ram_write(uint32_t addr, uint32_t wdata, uint8_t wstrb) {
+  svScope ram_scope = svGetScopeFromName("TOP.miniRV.ram");
+  if (!ram_scope) {
+    std::cerr << "ERROR: svGetScopeFromName(\"TOP.ram\") returned NULL\n";
+    std::exit(1);
+  }
+  svSetScope(ram_scope);
+  VminiRV::sv_mem_write(addr, wdata, wstrb);
+}
+
+void dut_rom_write(uint32_t addr, uint32_t wdata, uint8_t wstrb) {
+  svScope rom_scope = svGetScopeFromName("TOP.miniRV.rom");
+  if (!rom_scope) {
+    std::cerr << "ERROR: svGetScopeFromName(\"TOP.rom\") returned NULL\n";
+    std::exit(1);
+  }
+  svSetScope(rom_scope);
+  VminiRV::sv_mem_write(addr, wdata, wstrb);
+}
+
+uint32_t dut_ram_read(uint32_t addr) {
+  svScope ram_scope = svGetScopeFromName("TOP.miniRV.ram");
+  if (!ram_scope) {
+    std::cerr << "ERROR: svGetScopeFromName(\"TOP.ram\") returned NULL\n";
+    std::exit(1);
+  }
+  svSetScope(ram_scope);
+  return VminiRV::sv_mem_read(addr);
+}
+
+uint32_t dut_rom_read(uint32_t addr) {
+  svScope rom_scope = svGetScopeFromName("TOP.miniRV.rom");
+  if (!rom_scope) {
+    std::cerr << "ERROR: svGetScopeFromName(\"TOP.rom\") returned NULL\n";
+    std::exit(1);
+  }
+  svSetScope(rom_scope);
+  return VminiRV::sv_mem_read(addr);
 }
 
 bool compare_reg(uint64_t sim_time, const char* name, uint32_t dut_v, uint32_t gm_v) {
@@ -190,8 +228,7 @@ inst_size_t random_instruction(std::mt19937* gen) {
 void random_difftest() {
   VminiRV *dut = new VminiRV;
   miniRV *gm = new miniRV;
-  gm->ram = new byte[65536];
-  gm->rom = new byte[65536];
+  gm_mem_reset(gm);
   uint32_t n_inst = 200;
   inst_size_t* insts = new inst_size_t[n_inst];
   bool test_not_failed = true;
@@ -199,7 +236,6 @@ void random_difftest() {
   uint64_t max_sim_time = 400;
   uint64_t max_tests = 1000;
   uint64_t seed = hash_uint64_t(std::time(0));
-  // uint64_t seed = 11912696108987925668;
   do {
     printf("======== SEED:%lu ===== %u/%u =========\n", seed, tests_passed, max_tests);
     std::random_device rd;
@@ -212,28 +248,19 @@ void random_difftest() {
 
     Trigger clock = {};
     Trigger reset = {};
-    dut->clk = 0;
-    dut->rom_wen = 1;
     for (uint32_t i = 0; i < n_inst; i++) {
-      dut->eval();
-      dut->rom_wdata = insts[i].v;
-      dut->rom_addr = i*4;
-      dut->clk ^= 1;
-      dut->eval();
-      dut->clk ^= 1;
-
-      // NOTE: Golden Model loads the same instructions
-      mem_write(gm->rom, clock, reset, {1}, {1, 1, 1, 1}, {i*4}, insts[i], ROM_SIZE);
+      dut_rom_write(i*4, insts[i].v, 0b1111);
+      gm_mem_write(gm, clock, reset, {1}, {1, 1, 1, 1}, {i*4}, insts[i]);
       clock_tick(&clock);
-      mem_write(gm->rom, clock, reset, {1}, {1, 1, 1, 1}, {i*4}, insts[i], ROM_SIZE);
+      gm_mem_write(gm, clock, reset, {1}, {1, 1, 1, 1}, {i*4}, insts[i]);
       clock_tick(&clock);
     }
-    dut->rom_wen = 0;
     reset_dut(dut);
     reset_gm(gm, &clock, &reset);
+    gm_mem_reset(gm);
     for (uint64_t t = 0; t < max_sim_time && gm->pc.v <= n_inst; t++) {
       dut->eval();
-      inst_size_t inst = mem_read(gm->rom, gm->pc, ROM_SIZE);
+      inst_size_t inst = gm_mem_read(gm, gm->pc);
       cpu_eval(gm, clock, reset);
       test_not_failed &= compare(dut, gm, t);
       dut->clk ^= 1;
@@ -250,7 +277,7 @@ void random_difftest() {
     }
     reset_dut(dut);
     reset_gm(gm, &clock, &reset);
-    mem_reset(gm->ram, ROM_SIZE);
+    gm_mem_reset(gm);
 
     seed = hash_uint64_t(seed);
     if (test_not_failed) {
@@ -266,21 +293,18 @@ void random_difftest() {
   delete gm;
 }
 
-void draw_image_raylib(char* image) {
-  const int FB_W = 256;
-  const int FB_H = 256;
-
+void draw_image_raylib(char* image, uint32_t width, uint32_t height) {
   auto *fb = reinterpret_cast<void*>(image);
 
-  InitWindow(FB_W, FB_H, "Framebuffer viewer");
+  InitWindow(width, height, "Framebuffer viewer");
   SetTargetFPS(60);
 
   // Create a texture in the format you expect your buffer to be in.
   // Most common: RGBA8888 (bytes: R, G, B, A)
   Image img = {};
   img.data = fb; 
-  img.width = FB_W;
-  img.height = FB_H;
+  img.width = width;
+  img.height = height;
   img.mipmaps = 1;
   img.format = PIXELFORMAT_UNCOMPRESSED_R8G8B8A8;
 
@@ -289,8 +313,8 @@ void draw_image_raylib(char* image) {
     ClearBackground(BLACK);
 
     // Scale it up to the window
-    for (int y = 0; y < FB_H; y++) {
-      for (int x = 0; x < FB_W; x++) {
+    for (int y = 0; y < height; y++) {
+      for (int x = 0; x < width; x++) {
         uint32_t p = ((uint32_t*)fb)[y*256 + x];
         unsigned char blue = p & 0xff;
         unsigned char green = (p >> 8) & 0xff;
@@ -308,55 +332,57 @@ void draw_image_raylib(char* image) {
 void vga_image_test() {
   VminiRV* dut = new VminiRV;
   const uint64_t base = 0x20000000;
-  const uint64_t nbytes = 256*256*4;
+  const uint32_t width  = 256;
+  const uint32_t height = 256;
+  const uint64_t nbytes = width*height*4;
   char* image = new char[nbytes];
+  auto hex_bytes = read_hex_bytes_one_per_line("vga2.hex");
   reset_dut(dut);
+  for (uint32_t i = 0; i < hex_bytes.size(); i++) {
+    dut_ram_write(i, hex_bytes[i], 0b0001);
+  }
+
   for (uint64_t t = 0; t < 2000000; t++) {
+    uint32_t inst = dut_ram_read(dut->pc);
     dut->eval();
     dut->clk ^= 1;
   }
 
-  svScope vga_scope = svGetScopeFromName("TOP.miniRV.vga");
-  if (!vga_scope) {
-    std::cerr << "ERROR: svGetScopeFromName(\"TOP.vga\") returned NULL\n";
-    std::exit(1);
-  }
-  svSetScope(vga_scope);
   for (uint64_t i = 0; i < nbytes; i++) {
-    image[i] = mem_get(i);
+    image[i] = dut_ram_read(i+base);
   }
-  draw_image_raylib(image);
+  draw_image_raylib(image, width, height);
 }
 
 void vga_image_gm() {
   miniRV* gm = new miniRV;
-  const uint64_t base = 0x20000000;
-  const uint64_t nbytes = 256*256*4;
+  const uint32_t base = 0x20000000;
+  const uint32_t width  = 256;
+  const uint32_t height = 256;
+  const uint32_t nbytes = width*height*4;
   char* image = new char[nbytes];
   Trigger clock = {};
   Trigger reset = {};
-  gm->ram = new byte[0x30000000];
-  gm->rom = new byte[0x30000000];
   auto hex_bytes = read_hex_bytes_one_per_line("vga2.hex");
-  for (uint64_t i = 0; i < hex_bytes.size(); i++) {
-    gm->rom[i].v = hex_bytes[i];
-    gm->ram[i].v = hex_bytes[i];
+  gm_mem_reset(gm);
+  for (uint32_t i = 0; i < hex_bytes.size(); i++) {
+    gm->mem[i].v = hex_bytes[i];
   }
   reset_gm(gm, &clock, &reset);
-  for (uint64_t t = 0; t < 2000000; t++) {
+  for (uint32_t t = 0; t < 2000000; t++) {
     cpu_eval(gm, clock, reset);
     clock_tick(&clock);
   }
-  for (uint64_t i = 0; i < nbytes; i++) {
-    image[i] = gm->ram[i+base].v;
+  for (uint32_t i = 0; i < nbytes; i++) {
+    image[i] = gm_mem_read(gm, {i+base}).v;
   }
-  draw_image_raylib(image);
+  draw_image_raylib(image, width, height);
 }
 
 int main(int argc, char** argv, char** env) {
   // random_difftest();
-  // vga_image_test();
-  vga_image_gm();
+  vga_image_test();
+  // vga_image_gm();
   exit(EXIT_SUCCESS);
 }
 

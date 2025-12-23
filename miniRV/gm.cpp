@@ -30,7 +30,10 @@
 #define OPCODE_SB    (OPCODE_SW)
 #define FUNCT3_SW    (0b010)
 #define FUNCT3_SB    (0b000)
-#define INST(name) (((FUNCT3_##name) << OPCODE_BITS) | (OPCODE_##name))
+
+#define REG_A0 (0x10)
+
+#define OPCODE_EBREAK (0b1110011)
 
 struct bit {
   uint32_t v : 1;
@@ -76,10 +79,12 @@ reg_index_t REG_0 = {};
 reg_size_t REG_VALUE_0 = {};
 
 struct miniRV {
-  addr_size_t pc;
+  addr_size_t pc = {MEM_START};
   reg_size_t regs[N_REGS];
   byte mem[MEM_SIZE];
   byte vga[VGA_SIZE];
+
+  bit ebreak;
 
   Trigger clock;
   Trigger reset;
@@ -160,6 +165,7 @@ inst_size_t gm_mem_read(miniRV* cpu, addr_size_t addr) {
       cpu->vga[addr.v+1].v <<  8 | cpu->vga[addr.v+0].v <<  0 ;
   }
   else if (addr.v >= MEM_START && addr.v < MEM_END) {
+    addr.v -= MEM_START;
     result.v = 
       cpu->mem[addr.v+3].v << 24 | cpu->mem[addr.v+2].v << 16 |
       cpu->mem[addr.v+1].v <<  8 | cpu->mem[addr.v+0].v <<  0 ;
@@ -193,6 +199,7 @@ void gm_mem_write(miniRV* cpu, bit write_enable, bit4 write_enable_bytes, addr_s
         }
       }
       else if (addr.v >= MEM_START && addr.v < MEM_END) {
+        addr.v -= MEM_START;
         if (write_enable_bytes.bits[0].v) {
           cpu->mem[addr.v + 0].v = (write_data.v >>  0) & 0xff;
         }
@@ -215,7 +222,7 @@ void gm_mem_write(miniRV* cpu, bit write_enable, bit4 write_enable_bytes, addr_s
 
 void pc_write(miniRV* cpu, addr_size_t in_addr, bit is_jump) {
   if (is_positive_edge(cpu->reset)) {
-    cpu->pc.v = 0;
+    cpu->pc.v = MEM_START;
   }
   else if (is_positive_edge(cpu->clock)) {
     if (is_jump.v) {
@@ -312,6 +319,11 @@ Dec_out dec_eval(inst_size_t inst) {
     else        out.imm.v = ( 0 << 12) | top_imm | bot_imm;
     out.write_enable.v = 0;
   }
+  else if (out.opcode.v == OPCODE_EBREAK) {
+    // EBREAK
+    out.imm.v = take_bits_range(inst.v, 20, 31);
+    out.write_enable.v = 0;
+  }
   else {
     out.imm.v = 0;
     out.write_enable.v = 0;
@@ -357,6 +369,11 @@ void print_instruction(inst_size_t inst) {
         printf("not implemented:%u\n", inst);
       }
     } break;
+    case OPCODE_EBREAK: {
+      // EBREAK
+      printf("ebreak\n");
+    } break;
+
     default: { // NOT IMPLEMENTED
       printf("GM WARNING: not implemented:0x%x\n", inst);
     } break;
@@ -369,10 +386,11 @@ struct CPU_out {
   addr_size_t pc_addr;
   addr_size_t ram_addr;
   reg_size_t  ram_write_data;
+  bit ebreak;
 };
 
 CPU_out cpu_eval(miniRV* cpu) {
-  CPU_out out = {0};
+  CPU_out out = {};
   inst_size_t inst = gm_mem_read(cpu, cpu->pc);
   Dec_out dec_out = dec_eval(inst);
   RF_out rf_out = rf_read(cpu, dec_out.reg_src1, dec_out.reg_src2);
@@ -388,63 +406,31 @@ CPU_out cpu_eval(miniRV* cpu) {
   addr_size_t ram_addr = {};
   if (dec_out.opcode.v == OPCODE_ADDI) {
     // ADDI
-    ram_write_enable.v = 0;
-    ram_addr.v = 0;
-    ram_write_data.v = 0;
     reg_write_data = alu_out;
-    ram_write_enable_bytes = {0, 0, 0, 0};
-    in_addr.v = 0;
-    is_jump.v = 0;
   }
   else if (dec_out.opcode.v == OPCODE_JALR) {
     // JALR
-    ram_write_enable.v = 0;
-    ram_addr.v = 0;
-    ram_write_data.v = 0;
-    ram_write_enable_bytes = {0, 0, 0, 0};
     reg_write_data.v= cpu->pc.v + 4;
     in_addr.v = (rf_out.rdata1.v + dec_out.imm.v) & ~3;
     is_jump.v = 1;
   }
   else if (dec_out.opcode.v == OPCODE_ADD) {
     // ADD
-    ram_write_enable.v = 0;
-    ram_addr.v = 0;
-    ram_write_data.v = 0;
-    ram_write_enable_bytes = {0, 0, 0, 0};
     reg_write_data = alu_out;
-    in_addr.v = 0;
-    is_jump.v = 0;
   }
   else if (dec_out.opcode.v == OPCODE_LUI) {
     // LUI
-    ram_write_enable.v = 0;
-    ram_addr.v = 0;
-    ram_write_data.v = 0;
-    ram_write_enable_bytes = {0, 0, 0, 0};
     reg_write_data.v = dec_out.imm.v;
-    in_addr.v = 0;
-    is_jump.v = 0;
   }
   else if (dec_out.opcode.v == OPCODE_LW && dec_out.funct3.v == FUNCT3_LW) {
     // LW
-    ram_write_enable.v = 0;
     ram_addr.v = rf_out.rdata1.v + dec_out.imm.v;
-    ram_write_data.v = 0;
-    ram_write_enable_bytes = {0, 0, 0, 0};
     reg_write_data = gm_mem_read(cpu, ram_addr);
-    in_addr.v = 0;
-    is_jump.v = 0;
   }
   else if (dec_out.opcode.v == OPCODE_LW && dec_out.funct3.v == FUNCT3_LBU) {
     // LBU
-    ram_write_enable.v = 0;
     ram_addr.v = rf_out.rdata1.v + dec_out.imm.v;
-    ram_write_data.v = 0;
-    ram_write_enable_bytes = {0, 0, 0, 0};
     reg_write_data.v = gm_mem_read(cpu, ram_addr).v & 0xff;
-    in_addr.v = 0;
-    is_jump.v = 0;
   }
   else if (dec_out.opcode.v == OPCODE_SW) {
     // SW
@@ -457,21 +443,15 @@ CPU_out cpu_eval(miniRV* cpu) {
     else if (dec_out.funct3.v == FUNCT3_SB) {
       ram_write_enable_bytes = {1, 0, 0, 0};
     }
-    reg_write_data.v = 0;
-    in_addr.v = 0;
-    is_jump.v = 0;
+  }
+  else if (dec_out.opcode.v == OPCODE_EBREAK && dec_out.imm.v == 1) {
+    // EBREAK
+    out.ebreak.v = 1;
+    cpu->ebreak.v = 1;
   }
   else {
     print_instruction(inst);
-    ram_write_enable.v = 0;
-    ram_addr.v = 0;
-    ram_write_data.v = 0;
-    ram_write_enable_bytes = {0, 0, 0, 0};
-    reg_write_data.v = 0;
-    in_addr.v = 0;
-    is_jump.v = 0;
   }
-
 
   out.reg_dest = dec_out.reg_dest;
   out.reg_write_data = reg_write_data;
@@ -486,7 +466,7 @@ CPU_out cpu_eval(miniRV* cpu) {
 }
 
 void cpu_reset_regs(miniRV* cpu) {
-  cpu->pc.v = 0;
+  cpu->pc.v = MEM_START;
   for (uint32_t i = 0; i < N_REGS; i++) {
     cpu->regs[i].v = 0;
   }
@@ -496,7 +476,7 @@ struct GmVcdTrace {
   miniRV* gm = nullptr;
   uint32_t base = 0;
 
-  static constexpr int kRegs = 32;
+  static constexpr int kRegs = 16;
 
   explicit GmVcdTrace(miniRV* g) : gm(g) {}
 
@@ -526,7 +506,6 @@ struct GmVcdTrace {
     auto* self = static_cast<GmVcdTrace*>(userp);
     self->base = code;
 
-    // Use hierarchical names directly (no module() needed)
     declBusCompat(vcdp, code + 0, "gm.pc", 31, 0, 0);
 
     for (int i = 0; i < kRegs; i++) {
@@ -538,12 +517,11 @@ struct GmVcdTrace {
 
   static void full_cb(void* userp, VerilatedVcd::Buffer* bufp) {
     auto* self = static_cast<GmVcdTrace*>(userp);
-    const uint32_t b = self->base;
+    vluint32_t* const oldp = bufp->oldp(self->base);
 
-    // NOTE: adjust these field accesses to match your miniRV layout
-    bufp->fullIData(bufp->oldp(b + 0), self->gm->pc.v, N_REGS);
+    bufp->fullIData(oldp + 1, self->gm->pc.v, 32);
     for (int i = 0; i < kRegs; i++) {
-      bufp->fullIData(bufp->oldp(b + 1 + i), self->gm->regs[i].v, N_REGS);
+      bufp->fullIData(oldp + 2 + i, self->gm->regs[i].v, 32);
     }
   }
 
@@ -611,6 +589,12 @@ inst_size_t sb(uint32_t imm, uint32_t reg_src2, uint32_t reg_src1) {
   uint32_t top_imm = imm << 5;
   uint32_t bot_imm = 0b11111 & imm;
   uint32_t inst_u32 = (top_imm << 25) | (reg_src2 << 20) | (reg_src1 << 15) | (FUNCT3_SB << 12) | (bot_imm << 7) | OPCODE_SW;
+  inst_size_t result = { inst_u32 };
+  return result;
+}
+
+inst_size_t ebreak() {
+  uint32_t inst_u32 = 1u << 20 | OPCODE_EBREAK;
   inst_size_t result = { inst_u32 };
   return result;
 }

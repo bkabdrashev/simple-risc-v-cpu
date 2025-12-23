@@ -15,6 +15,7 @@ extern "C" void mem_read(uint32_t address, uint32_t* result) {
         vga[address + 1] <<  8 | vga[address + 0] <<  0 ;
   }
   else if (address >= MEM_START && address < MEM_END) {
+    address -= MEM_START;
     *result = 
       memory[address + 3] << 24 | memory[address + 2] << 16 |
       memory[address + 1] <<  8 | memory[address + 0] <<  0 ;
@@ -39,6 +40,7 @@ extern "C" void mem_write(uint32_t address, uint32_t write_data, uint8_t wstrb) 
     if (wstrb & (1<<3)) vga[address + 3] = byte3;
   }
   else if (address >= MEM_START && address < MEM_END) {
+    address -= MEM_START;
     if (wstrb & (1<<0)) memory[address + 0] = byte0;
     if (wstrb & (1<<1)) memory[address + 1] = byte1;
     if (wstrb & (1<<2)) memory[address + 2] = byte2;

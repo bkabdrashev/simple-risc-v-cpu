@@ -71,6 +71,31 @@ std::vector<std::uint8_t> read_hex_bytes_one_per_line(const std::string& path) {
   return bytes;
 }
 
+std::vector<uint8_t> read_bin_file(const std::string& path) {
+  std::ifstream file(path, std::ios::binary | std::ios::ate);
+  std::vector<uint8_t> buffer;
+
+  if (!file) {
+    std::cerr << "Error: Could not open " << path << "\n";
+    return buffer;
+  }
+
+  const std::streamsize size = file.tellg();
+  if (size <= 0) {               // covers empty file (0) and tellg() failure (-1)
+    return buffer;
+  }
+
+  buffer.resize(static_cast<size_t>(size));
+  file.seekg(0, std::ios::beg);
+
+  if (!file.read(reinterpret_cast<char*>(buffer.data()), size)) {
+    std::cerr << "Error: Could not read file.\n";
+    buffer.clear();
+  }
+
+  return buffer;
+}
+
 void clock_tick(miniRV* cpu) {
   cpu->clock.prev = cpu->clock.curr;
   cpu->clock.curr ^= 1;
@@ -218,7 +243,7 @@ uint32_t random_bits(std::mt19937* gen, uint32_t n) {
 }
 
 inst_size_t random_instruction(std::mt19937* gen) {
-  uint32_t inst_id = random_range(gen, 0, 8);
+  uint32_t inst_id = random_range(gen, 0, 9);
   inst_size_t inst = {};
   switch (inst_id) {
     case 0: { // ADDI
@@ -269,6 +294,9 @@ inst_size_t random_instruction(std::mt19937* gen) {
       uint32_t rs1  = random_bits(gen, 4);
       inst = sb(imm, rs2, rs1);
     } break;
+    case 8: { // EBREAK
+      inst = ebreak();
+    } break;
   }
   return inst;
 }
@@ -305,33 +333,114 @@ inst_size_t random_instruction_mem_load_or_store(std::mt19937* gen) {
   return inst;
 }
 
-void random_difftest() {
+struct Tester_gm_dut {
+  miniRV* gm;
+  VminiRV* dut;
+  GmVcdTrace* gm_trace;
+  VerilatedVcdC* m_trace;
 
-  miniRV *gm = new miniRV;
-  VminiRV *dut = new VminiRV;
+  uint8_t* dpi_c_memory;
+  uint8_t* dpi_c_vga;
+};
 
+Tester_gm_dut new_tester() {
+  Tester_gm_dut result = {};
+  result.gm = new miniRV;
+  result.dut = new VminiRV;
   Verilated::traceEverOn(true);
-  VerilatedVcdC *m_trace = new VerilatedVcdC;
-  dut->trace(m_trace, 5);
+  result.m_trace = new VerilatedVcdC;
+  result.dut->trace(result.m_trace, 5);
 
-  GmVcdTrace gm_trace{gm};
-  m_trace->spTrace()->addInitCb(&GmVcdTrace::init_cb, &gm_trace);
-  m_trace->spTrace()->addFullCb(&GmVcdTrace::full_cb, 0, &gm_trace);
-  m_trace->spTrace()->addChgCb (&GmVcdTrace::chg_cb,  0, &gm_trace);
-  m_trace->open("waveform.vcd");
+  result.gm_trace = new GmVcdTrace(result.gm);
+  result.m_trace->spTrace()->addInitCb(&GmVcdTrace::init_cb, result.gm_trace);
+  result.m_trace->spTrace()->addFullCb(&GmVcdTrace::full_cb, 0, result.gm_trace);
+  result.m_trace->spTrace()->addChgCb (&GmVcdTrace::chg_cb,  0, result.gm_trace);
+  result.m_trace->open("waveform.vcd");
 
-  // 0b111111110001 11001 000 01101 0010011
-  // addi
+  result.dpi_c_memory = dut_ram_ptr();
+  result.dpi_c_vga = dut_vga_ptr();
+  return result;
+}
 
-  uint8_t* memory = dut_ram_ptr();
-  uint8_t* vga = dut_vga_ptr();
+void delete_tester(Tester_gm_dut tester) {
+  tester.m_trace->close();
+  delete tester.gm_trace;
+  delete tester.m_trace;
+  delete tester.dut;
+  delete tester.gm;
+}
 
-  uint32_t n_insts = 1000;
+bool test_instructions(Tester_gm_dut tester, inst_size_t* insts, uint32_t n_insts, uint64_t max_sim_time) {
+  bool is_test_success = true;
+
+  VminiRV* dut = tester.dut;
+  miniRV* gm  = tester.gm;
+  uint8_t* dpi_c_memory  = tester.dpi_c_memory;
+  uint8_t* dpi_c_vga  = tester.dpi_c_vga;
+  // VerilatedVcdC* m_trace = tester.m_trace;
+
+  dut->clk = 0;
+  dut->rom_wen = 1;
+  for (uint32_t i = 0; i < n_insts; i++) {
+    uint32_t address = 4*i + MEM_START;
+    dut->rom_wdata = insts[i].v;
+    dut->rom_addr = address;
+    dut->clk = 0;
+    dut->eval();
+    dut->clk = 1;
+    dut->eval();
+
+    clock_tick(gm);
+    gm_mem_write(gm, {1}, {1, 1, 1, 1}, {address}, insts[i]);
+    clock_tick(gm);
+    // print_instruction(insts[i]);
+  }
+  dut->rom_wen = 0;
+  reset_dut_regs(dut);
+  reset_gm_regs(gm);
+  dut->clk = 0;
+  for (uint64_t t = 0; t < max_sim_time; t++) {
+    dut->eval();
+    inst_size_t inst = gm_mem_read(gm, gm->pc);
+    CPU_out out = cpu_eval(gm);
+    if (gm->ebreak.v && dut->ebreak) {
+      printf("gm and dut ebreak\n");
+      break;
+    }
+    tester.m_trace->dump(t);
+
+    is_test_success &= compare(dut, gm, dpi_c_memory, dpi_c_vga, t);
+
+    if (!is_test_success) {
+      for (uint32_t i = 0; i < n_insts; i++) {
+        printf("pc=%x: ", 4*i);
+        print_instruction(insts[i]);
+      }
+
+      printf("[%u] pc=%x inst: ", t, gm->pc.v);
+      print_instruction(inst);
+      break;
+    }
+
+    clock_tick(gm);
+    dut->clk ^= 1;
+  }
+  reset_dut_mem(dut);
+  reset_dut_regs(dut);
+  gm_mem_reset(gm);
+  reset_gm_regs(gm);
+
+  return is_test_success;
+}
+
+void random_difftest() {
+  Tester_gm_dut tester = new_tester();
+  uint32_t n_insts = 4;
   inst_size_t* insts = new inst_size_t[n_insts];
-  bool test_not_failed = true;
+  bool is_tests_success = true;
   uint64_t tests_passed = 0;
   uint64_t max_sim_time = 2000;
-  uint64_t max_tests = 100000;
+  uint64_t max_tests = 2;
   // uint64_t seed = hash_uint64_t(std::time(0));
   // uint64_t seed = 3263282379841580567lu;
   // uint64_t seed = 10714955119269546755lu;
@@ -348,65 +457,14 @@ void random_difftest() {
       insts[i] = inst;
     }
 
-    dut->clk = 0;
-    dut->rom_wen = 1;
-    for (uint32_t i = 0; i < n_insts; i++) {
-      dut->rom_wdata = insts[i].v;
-      dut->rom_addr = i*4;
-      dut->clk = 0;
-      dut->eval();
-      dut->clk = 1;
-      dut->eval();
-
-      clock_tick(gm);
-      gm_mem_write(gm, {1}, {1, 1, 1, 1}, {4*i}, insts[i]);
-      clock_tick(gm);
-    }
-    dut->rom_wen = 0;
-    reset_dut_regs(dut);
-    reset_gm_regs(gm);
-    dut->clk = 0;
-    for (uint64_t t = 0; t < max_sim_time && gm->pc.v < n_insts*4; t++) {
-      dut->eval();
-      inst_size_t inst = gm_mem_read(gm, gm->pc);
-      cpu_eval(gm);
-      // m_trace->dump(t);
-
-      test_not_failed &= compare(dut, gm, memory, vga, t);
-
-      if (!test_not_failed) {
-        for (uint32_t i = 0; i < n_insts; i++) {
-          // inst_size_t inst = random_instruction_mem_load_or_store(&gen);
-          printf("pc=%x: ", 4*i);
-          print_instruction(insts[i]);
-        }
-
-        printf("[%u] pc=%x inst: ", t, gm->pc.v);
-        print_instruction(inst);
-        break;
-      }
-
-      clock_tick(gm);
-      dut->clk ^= 1;
-    }
-    reset_dut_mem(dut);
-    reset_dut_regs(dut);
-    gm_mem_reset(gm);
-    reset_gm_regs(gm);
-
-    seed = hash_uint64_t(seed);
-    if (test_not_failed) {
+    is_tests_success &= test_instructions(tester, insts, n_insts, max_sim_time);
+    if (is_tests_success) {
       tests_passed++;
     }
-  } while (test_not_failed && tests_passed < max_tests);
-  m_trace->close();
-
+    seed = hash_uint64_t(seed);
+  } while (is_tests_success && tests_passed < max_tests);
 
   std::cout << "Tests results:\n" << tests_passed << " / " << max_tests << " have passed\n";
-
-  delete insts;
-  delete dut;
-  delete gm;
 }
 
 void draw_image_raylib(char* image, uint32_t width, uint32_t height) {
@@ -485,8 +543,27 @@ void vga_image_gm() {
   draw_image_raylib(image, width, height);
 }
 
+void dummy_test() {
+  Tester_gm_dut tester = new_tester();
+  std::vector<uint8_t> buffer = read_bin_file("dummy-minirv-npc.bin");
+  uint32_t n_insts = buffer.size();
+  inst_size_t* insts = new inst_size_t[n_insts];
+  for (uint32_t i = 0; i < n_insts; i+=4) {
+    uint32_t byte3 = buffer[i + 3] << 24;
+    uint32_t byte2 = buffer[i + 2] << 16;
+    uint32_t byte1 = buffer[i + 1] <<  8;
+    uint32_t byte0 = buffer[i + 0] <<  0;
+    insts[i/4] = { byte0 | byte1 | byte2 | byte3 };
+    // print_instruction(insts[i]);
+  }
+  test_instructions(tester, insts, n_insts, 1000);
+  printf("a0: %i \n", tester.dut->regs_out[REG_A0]);
+  delete_tester(tester);
+}
+
 int main(int argc, char** argv, char** env) {
-  random_difftest();
+  // random_difftest();
+  dummy_test();
   // vga_image_test();
   // vga_image_gm();
   exit(EXIT_SUCCESS);

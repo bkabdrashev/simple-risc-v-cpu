@@ -1,8 +1,8 @@
 # translates the main.sv with trace and test bench enabled; then build the obj file and runs;
 verilator -Wall --trace -cc main.sv --exe tb_main.cpp && make -C obj_dir -f Vmain.mk Vmain && ./obj_dir/Vmain
-verilator -Wall --trace -cc miniRV.sv --exe tb_miniRV.cpp && make -C obj_dir -f VminiRV.mk VminiRV && ./obj_dir/VminiRV
+verilator -LDFLAGS -lraylib -Wall --trace -cc miniRV.sv c_dpi.cpp --exe tb_miniRV.cpp && make -C obj_dir -f VminiRV.mk VminiRV && ./obj_dir/VminiRV
 verilator -LDFLAGS -lraylib -Wall --cc miniRV.sv c_dpi.cpp --exe tb_miniRV.cpp --build --runtime-debug -CFLAGS "-g3 -O0 -fno-omit-frame-pointer" -LDFLAGS "-g" && make -C obj_dir -f VminiRV.mk VminiRV && ./obj_dir/VminiRV
 # translate 4 byte hex to LE bin
 tail -n +2 vga.hex | sed -e 's/.*: //' -e 's/ /\n/g' | sed -e's/\(..\)\(..\)\(..\)\(..\)/\4 \3 \2 \1/' | xxd -r -p > vga.bin
 # translate bin to 1 byte hex  line by line
-xxd -p -c 1 vga.bin > vga2.hex
+xxd -p -c 1 dummy-minirv-npc.bin > dummy-minirv-npc2.hex

@@ -44,6 +44,10 @@ module dec (
       // SW, SB
       imm = {{20{sign}}, inst[31:25], inst[11:7]};
       wen = 0;
+    end else if (opcode == 7'b1110011) begin
+      // ECALL, EBREAK
+      imm = {20'b0, inst[31:20]};
+      wen = 0;
     end else begin
       imm = 0;
       wen = 0;

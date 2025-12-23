@@ -1,4 +1,4 @@
-module pc (
+module pc #(parameter int unsigned INITIAL_PC = 32'h8000_0000) (
   input logic clk,
   input logic reset,
   input logic [31:0] in_addr,
@@ -9,7 +9,7 @@ module pc (
   logic [31:0] next_addr;
   always_ff @(posedge clk or posedge reset) begin
     if (reset) begin
-      next_addr <= 0;
+      next_addr <= INITIAL_PC;
     end else if (is_addr) begin
       next_addr <= in_addr;
     end else begin

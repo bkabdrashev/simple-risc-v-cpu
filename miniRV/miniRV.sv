@@ -6,7 +6,8 @@ module miniRV (
   input logic [31:0] rom_addr,
   input logic clk,
   output logic [31:0] regs_out [0:15],
-  output logic [31:0] pc
+  output logic [31:0] pc,
+  output logic ebreak
 );
 
   logic [31:0] inst;
@@ -28,6 +29,7 @@ module miniRV (
   logic [31:0] wdata;
 
   logic        ram_wen;
+ /* verilator lint_off UNOPTFLAT */
   logic [31:0] ram_addr;
   logic [31:0] ram_wdata;
   logic [31:0] ram_rdata;
@@ -100,6 +102,7 @@ module miniRV (
       wdata = 0;
       pc_addr = 0;
       is_pc_jump = 0;
+      ebreak = 0;
     end else begin
       if (dec_opcode == 7'b0010011) begin
         // ADDI
@@ -110,6 +113,7 @@ module miniRV (
         wdata = alu_res;
         pc_addr = 0;
         is_pc_jump = 0;
+        ebreak = 0;
       end else if (dec_opcode == 7'b1100111) begin
         // JALR
         ram_wen = 0;
@@ -120,6 +124,7 @@ module miniRV (
         wdata = pc+4;
         pc_addr = (rdata1 + dec_imm) & ~3;
         is_pc_jump = 1;
+        ebreak = 0;
       end else if (dec_opcode == 7'b0110011) begin
         // ADD
         ram_wen = 0;
@@ -130,6 +135,7 @@ module miniRV (
         wdata = alu_res;
         pc_addr = 0;
         is_pc_jump = 0;
+        ebreak = 0;
       end else if (dec_opcode == 7'b0110111) begin
         // LUI
         ram_wen = 0;
@@ -140,6 +146,7 @@ module miniRV (
         wdata = dec_imm;
         pc_addr = 0;
         is_pc_jump = 0;
+        ebreak = 0;
       end else if (dec_opcode == 7'b0000011 && dec_funct3 == 3'b010) begin
         // LW
         ram_wen = 0;
@@ -150,6 +157,7 @@ module miniRV (
         wdata = ram_rdata;
         pc_addr = 0;
         is_pc_jump = 0;
+        ebreak = 0;
       end else if (dec_opcode == 7'b0000011 && dec_funct3 == 3'b100) begin
         // LBU
         ram_wen = 0;
@@ -160,6 +168,7 @@ module miniRV (
         wdata = ram_rdata & 32'hff;
         pc_addr = 0;
         is_pc_jump = 0;
+        ebreak = 0;
       end else if (dec_opcode == 7'b0100011 && dec_funct3 == 3'b010) begin
         // SW
         ram_wen = 1;
@@ -170,6 +179,7 @@ module miniRV (
         wdata = 0;
         pc_addr = 0;
         is_pc_jump = 0;
+        ebreak = 0;
       end else if (dec_opcode == 7'b0100011 && dec_funct3 == 3'b000) begin
         // SB
         ram_wen = 1;
@@ -180,6 +190,21 @@ module miniRV (
         wdata = 0;
         pc_addr = 0;
         is_pc_jump = 0;
+        ebreak = 0;
+      end else if (dec_opcode == 7'b1110011 && dec_imm == 1) begin
+        // EBREAK
+
+        ram_wen = 0;
+        ram_addr = 0;
+        ram_wdata = 0;
+        ram_wstrb = 4'b0000;
+
+        wdata = 0;
+        pc_addr = 0;
+        is_pc_jump = 0;
+
+        ebreak = 1;
+        // $finish;
       end else begin
         // $strobe ("DUT WARNING: not implemented %h", clk);
         // NOT IMPLEMENTED
@@ -191,6 +216,7 @@ module miniRV (
         wdata = 0;
         pc_addr = 0;
         is_pc_jump = 0;
+        ebreak = 0;
       end
     end
   end

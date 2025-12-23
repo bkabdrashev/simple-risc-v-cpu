@@ -183,7 +183,7 @@ void gm_mem_write(miniRV* cpu, bit write_enable, bit4 write_enable_bytes, addr_s
   }
   else if (is_positive_edge(cpu->clock)) {
     if (write_enable.v) {
-      if (addr.v >= VGA_START && addr.v < VGA_END) {
+      if (addr.v >= VGA_START && addr.v < VGA_END-3) {
         addr.v -= VGA_START;
         if (write_enable_bytes.bits[0].v) {
           cpu->vga[addr.v + 0].v = (write_data.v & (0xff << 0)) >> 0;
@@ -198,7 +198,7 @@ void gm_mem_write(miniRV* cpu, bit write_enable, bit4 write_enable_bytes, addr_s
           cpu->vga[addr.v + 3].v = (write_data.v & (0xff << 24)) >> 24;
         }
       }
-      else if (addr.v >= MEM_START && addr.v < MEM_END) {
+      else if (addr.v >= MEM_START && addr.v < MEM_END-3) {
         addr.v -= MEM_START;
         if (write_enable_bytes.bits[0].v) {
           cpu->mem[addr.v + 0].v = (write_data.v >>  0) & 0xff;

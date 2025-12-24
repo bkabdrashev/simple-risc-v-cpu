@@ -38,6 +38,7 @@ module miniRV (
   pc u_pc(
     .clk(clk),
     .reset(reg_reset),
+    .block_increment(rom_wen),
     .in_addr(pc_addr),
     .is_addr(is_pc_jump),
     .out_addr(pc)

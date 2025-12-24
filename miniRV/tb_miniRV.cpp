@@ -498,7 +498,7 @@ bool random_difftest(Tester_gm_dut* tester) {
   return is_tests_success;
 }
 
-void draw_image_raylib(char* image, uint32_t width, uint32_t height) {
+void draw_image_raylib(uint8_t* image, uint32_t width, uint32_t height) {
   auto *fb = reinterpret_cast<void*>(image);
 
   InitWindow(width, height, "Framebuffer viewer");
@@ -531,7 +531,7 @@ void vga_image_test() {
   const uint32_t width  = 256;
   const uint32_t height = 256;
   const uint64_t nbytes = width*height*4;
-  char* image = new char[nbytes];
+  uint8_t* image = new uint8_t[nbytes];
   auto hex_bytes = read_hex_bytes_one_per_line("vga2.hex");
   reset_dut_mem(dut);
   reset_dut_regs(dut);
@@ -557,7 +557,7 @@ void vga_image_gm() {
   const uint32_t width  = 256;
   const uint32_t height = 256;
   const uint32_t nbytes = width*height*4;
-  char* image = new char[nbytes];
+  uint8_t* image = new uint8_t[nbytes];
   auto hex_bytes = read_hex_bytes_one_per_line("vga2.hex");
   gm_mem_reset(gm);
   for (uint32_t i = 0; i < hex_bytes.size(); i++) {
@@ -603,6 +603,77 @@ static int streq(const char* a, const char* b) {
   return a && b && strcmp(a, b) == 0;
 }
 
+void game(Tester_gm_dut* tester) {
+  const uint32_t width  = 256;
+  const uint32_t height = 256;
+  const uint32_t nbytes = width*height*4;
+  uint8_t* image = new uint8_t[nbytes];
+  auto buffer = read_bin_file("game-minirv-npc.bin");
+  tester->max_sim_time = 0;
+  tester->n_insts = buffer.size() / 4;
+  tester->insts = new inst_size_t[tester->n_insts];
+  for (uint32_t i = 0; i < tester->n_insts; i++) {
+    uint32_t byte3 = buffer[4*i + 3] << 24;
+    uint32_t byte2 = buffer[4*i + 2] << 16;
+    uint32_t byte1 = buffer[4*i + 1] <<  8;
+    uint32_t byte0 = buffer[4*i + 0] <<  0;
+    tester->insts[i] = { byte0 | byte1 | byte2 | byte3 };
+    // print_instruction(tester->insts[i]);
+  }
+  tester->dut->clk = 0;
+  tester->dut->rom_wen = 1;
+  for (uint32_t i = 0; i < tester->n_insts; i++) {
+    uint32_t address = 4*i + MEM_START;
+    tester->dut->rom_wdata = tester->insts[i].v;
+    tester->dut->rom_addr = address;
+    tester->dut->clk = 0;
+    tester->dut->eval();
+    tester->dut->clk = 1;
+    tester->dut->eval();
+    // print_instruction(tester->insts[i]);
+  }
+  tester->dut->rom_wen = 0;
+  reset_dut_regs(tester->dut);
+
+  InitWindow(width, height, "Framebuffer viewer");
+  SetTargetFPS(60);
+
+  while (!WindowShouldClose() && !tester->dut->ebreak) {
+    BeginDrawing();
+    ClearBackground(BLACK);
+
+    // ONE CYCLE
+    for (uint32_t i = 0; i < 4000000; i++) {
+      tester->dut->eval();
+      tester->dut->clk ^= 1;
+      tester->dut->eval();
+      tester->dut->clk ^= 1;
+    }
+
+    // ONE FRAME
+    for (int y = 0; y < height; y++) {
+      for (int x = 0; x < width; x++) {
+        uint32_t p = ((uint32_t*)tester->dpi_c_vga)[y*height + x];
+        unsigned char blue = p & 0xff;
+        unsigned char green = (p >> 8) & 0xff;
+        unsigned char red = (p >> 16) & 0xff;
+        Color c = { red, green, blue, 255};
+        DrawPixel(x, y, c);
+      }
+    }
+    EndDrawing();
+  }
+
+  CloseWindow();
+
+
+  for (uint32_t i = 0; i < nbytes; i++) {
+    image[i] = dut_ram_read(i+VGA_START);
+    printf("%u\n", image[i]);
+  }
+  draw_image_raylib(image, width, height);
+}
+
 int main(int argc, char** argv, char** env) {
   Tester_gm_dut* tester = new_tester();
   if (!tester) {
@@ -629,7 +700,8 @@ int main(int argc, char** argv, char** env) {
       }
       if (!random_difftest(tester)) exit_code = EXIT_FAILURE;
 
-    } else if (streq(mode, "bin")) {
+    }
+    else if (streq(mode, "bin")) {
       if (argc < 3) {
         fprintf(stderr, "Error: 'bin' requires a <path>\n");
         usage(argv[0]);
@@ -644,10 +716,21 @@ int main(int argc, char** argv, char** env) {
       }
       const char* path = argv[2];
       if (!bin_test(tester, path)) exit_code = EXIT_FAILURE;
-    } else if (streq(mode, "-h") || streq(mode, "--help") || streq(mode, "help")) {
+    }
+    else if (streq(mode, "game")) {
+      if (argc != 2) {
+        fprintf(stderr, "Error: too many arguments for 'game'\n");
+        usage(argv[0]);
+        exit_code = EXIT_FAILURE;
+        goto cleanup;
+      }
+      game(tester);
+    }
+    else if (streq(mode, "-h") || streq(mode, "--help") || streq(mode, "help")) {
       usage(argv[0]);
 
-    } else {
+    }
+    else {
       fprintf(stderr, "Error: unknown mode '%s'\n", mode);
       usage(argv[0]);
       exit_code = EXIT_FAILURE;

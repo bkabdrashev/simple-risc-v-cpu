@@ -83,6 +83,7 @@ struct miniRV {
   reg_size_t regs[N_REGS];
   byte mem[MEM_SIZE];
   byte vga[VGA_SIZE];
+  byte kbd[KBD_SIZE];
 
   bit ebreak;
 
@@ -154,6 +155,7 @@ reg_size_t alu_eval(opcode_size_t opcode, reg_size_t rdata1, reg_size_t rdata2, 
 void gm_mem_reset(miniRV* cpu) {
   memset(cpu->mem, 0, MEM_SIZE);
   memset(cpu->vga, 0, VGA_SIZE);
+  memset(cpu->kbd, 0, KBD_SIZE);
 }
 
 inst_size_t gm_mem_read(miniRV* cpu, addr_size_t addr) {
@@ -169,6 +171,12 @@ inst_size_t gm_mem_read(miniRV* cpu, addr_size_t addr) {
     result.v = 
       cpu->mem[addr.v+3].v << 24 | cpu->mem[addr.v+2].v << 16 |
       cpu->mem[addr.v+1].v <<  8 | cpu->mem[addr.v+0].v <<  0 ;
+  }
+  else if (addr.v >= KBD_START && addr.v < KBD_END-3) {
+    addr.v -= KBD_START;
+    result.v = 
+      cpu->kbd[addr.v+3].v << 24 | cpu->kbd[addr.v+2].v << 16 |
+      cpu->kbd[addr.v+1].v <<  8 | cpu->kbd[addr.v+0].v <<  0 ;
   }
   else {
     // printf("GM WARNING: mem read memory is not mapped\n");
@@ -211,6 +219,21 @@ void gm_mem_write(miniRV* cpu, bit write_enable, bit4 write_enable_bytes, addr_s
         }
         if (write_enable_bytes.bits[3].v) {
           cpu->mem[addr.v + 3].v = (write_data.v >> 24) & 0xff;
+        }
+      }
+      else if (addr.v >= KBD_START && addr.v < KBD_END-3) {
+        addr.v -= KBD_START;
+        if (write_enable_bytes.bits[0].v) {
+          cpu->kbd[addr.v + 0].v = (write_data.v >>  0) & 0xff;
+        }
+        if (write_enable_bytes.bits[1].v) {
+          cpu->kbd[addr.v + 1].v = (write_data.v >>  8) & 0xff;
+        }
+        if (write_enable_bytes.bits[2].v) {
+          cpu->kbd[addr.v + 2].v = (write_data.v >> 16) & 0xff;
+        }
+        if (write_enable_bytes.bits[3].v) {
+          cpu->kbd[addr.v + 3].v = (write_data.v >> 24) & 0xff;
         }
       }
       else {

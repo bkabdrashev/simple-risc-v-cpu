@@ -1,5 +1,5 @@
 #define MEM_START (0x80000000u)
-#define MEM_SIZE (1024 * 1024)
+#define MEM_SIZE (128*1024 * 1024)
 #define MEM_END  (MEM_START + MEM_SIZE)
 #define VGA_START (0x20000000u)
 #define VGA_END  (0x20040000u)

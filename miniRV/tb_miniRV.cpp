@@ -532,7 +532,7 @@ bool random_difftest(Tester_gm_dut* tester) {
   bool is_tests_success = true;
   uint64_t tests_passed = 0;
   tester->max_sim_time = 5000;
-  uint64_t max_tests = 100;
+  uint64_t max_tests = 100000;
   uint64_t seed = hash_uint64_t(std::time(0));
   // uint64_t seed = 10596642213997354837lu; // this seed seems to be good debugging entry
   // uint64_t seed = 12494773341427943734lu; // early jalr

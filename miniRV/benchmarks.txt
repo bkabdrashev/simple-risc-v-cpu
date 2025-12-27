@@ -6,7 +6,6 @@ Dhrystone PASS         2 Marks
                    vs. 100000 Marks (i7-7700K @ 4.20GHz)
 dut ebreak
 finished:147342957
-finished:119257543 ticks
 
 
 Trying 15000 runs through Dhrystone.

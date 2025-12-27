@@ -17,6 +17,7 @@ module rf (
   integer i;
 
   always_ff @(posedge clock or posedge reset) begin
+    // $display("wen: %b, rd: %d", wen, rd);
     if (reset) begin
       for (i = 0; i < N_REGS; i++) begin
         regs[i] <= 32'h0;

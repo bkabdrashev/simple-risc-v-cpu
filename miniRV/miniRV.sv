@@ -9,7 +9,7 @@ module miniRV (
   output logic [REG_END_WORD:0] pc,
 
   output logic ebreak,
-  output logic [1:0] bus_state
+  output logic is_step_finished
 );
 /* verilator lint_off UNUSEDPARAM */
   `include "defs.vh"
@@ -44,16 +44,18 @@ module miniRV (
   logic [REG_END_WORD-REG_END_BYTE-1:0] mem_byte_extend;
   logic [REG_END_WORD-REG_END_HALF-1:0] mem_half_extend;
 
-  logic [2:0]  inst_type;
-  logic        is_load;
+  logic [3:0]  inst_type;
   logic [N_REGS-1:0][REG_END_WORD:0] rf_regs_out;
 
-  sm bus_sm(
-    .clock(clock),
-    .reset(reset),
-    .is_load(is_load),
-    .in(bus_state),
-    .out(bus_state));
+  logic ifu_reqValid;
+  logic lsu_reqValid;
+  logic ifu_respValid;
+  logic lsu_respValid;
+  logic lsu_busy;
+  logic ifu_busy;
+
+  logic lsu_wen;
+  logic reg_wen;
 
   pc u_pc(
     .clock(clock),
@@ -61,16 +63,30 @@ module miniRV (
     .in_addr(pc_next),
     .out_addr(pc));
 
+  assign lsu_wen = (!ifu_busy && !lsu_busy && inst_type == INST_STORE) || top_mem_wen;
+
   ram u_ram(
     .clock(clock),
     .reset(reset),
-    .wen(bus_state != BUS_WAIT_LOAD && bus_state != BUS_WAIT_INST && inst_type == INST_STORE || top_mem_wen),
+    .reqValid(lsu_reqValid),
+    .wen(lsu_wen),
     .wdata(mem_wdata),
     .wbmask(mem_wbmask | {4{top_mem_wen}}),
     .addr(mem_addr),
+
+    .busy(lsu_busy),
+    .respValid(lsu_respValid),
     .rdata(mem_rdata));
 
-  mread u_mread(.clock(clock), .addr(pc), .rdata(inst));
+  mread u_mread(
+    .clock(clock),
+    .reset(reset),
+    .reqValid(ifu_reqValid),
+    .addr(pc),
+
+    .busy(ifu_busy),
+    .respValid(ifu_respValid),
+    .rdata(inst));
 
   dec u_dec(
     .inst(inst),
@@ -93,11 +109,12 @@ module miniRV (
     .rhs(alu_rhs),
     .res(alu_res));
 
+  assign reg_wen = !top_mem_wen && !ifu_busy && !lsu_busy;
   rf u_rf(
     .clock(clock),
     .reset(reset),
 
-    .wen(inst_type != INST_STORE && !top_mem_wen && bus_state != BUS_WAIT_INST && bus_state != BUS_WAIT_LOAD),
+    .wen(reg_wen),
     .wdata(reg_wdata),
 
     .rd(rd),
@@ -120,6 +137,7 @@ module miniRV (
       INST_JUMP:      alu_rhs = imm;         
       INST_IMM:       alu_rhs = imm;        
       INST_UPP:       alu_rhs = 0;        
+      default:        alu_rhs = 0;
     endcase
 
     if (top_mem_wen) begin
@@ -147,21 +165,31 @@ module miniRV (
     endcase
 
     case (inst_type)
-      INST_LOAD_BYTE: is_load = 1;
-      INST_LOAD_HALF: is_load = 1;
-      INST_LOAD_WORD: is_load = 1;
-      default:        is_load = 0;
+      INST_LOAD_BYTE: lsu_reqValid = (!ifu_busy || top_mem_wen) && lsu_respValid && !reset;
+      INST_LOAD_HALF: lsu_reqValid = (!ifu_busy || top_mem_wen) && lsu_respValid && !reset;
+      INST_LOAD_WORD: lsu_reqValid = (!ifu_busy || top_mem_wen) && lsu_respValid && !reset;
+      INST_STORE:     lsu_reqValid = (!ifu_busy || top_mem_wen) && lsu_respValid && !reset;
+      default:        lsu_reqValid = top_mem_wen;
     endcase
 
-    if (top_mem_wen || bus_state == BUS_WAIT_LOAD || bus_state == BUS_WAIT_INST) pc_next = pc;
+    if (top_mem_wen || ifu_busy || lsu_busy || lsu_reqValid) pc_next = pc;
     else if (inst_type == INST_JUMP) pc_next = alu_res & ~3;
     else pc_next = pc_inc;
+
+    ifu_reqValid = (!lsu_reqValid || lsu_respValid) && !lsu_busy && !reset && !top_mem_wen; 
 
     for (int i = 0; i < N_REGS; i++) begin
       regs[i] = rf_regs_out[i];
     end
   end
 
+  always_comb begin
+    if (top_mem_wen) begin
+      is_step_finished = lsu_respValid;
+    end else begin
+      is_step_finished = lsu_respValid || ifu_respValid && !lsu_reqValid;
+    end
+  end
 endmodule;
 
 

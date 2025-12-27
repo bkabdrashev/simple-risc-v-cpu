@@ -1,6 +1,5 @@
-localparam BUS_IDLE      = 2'h0;
-localparam BUS_WAIT_INST = 2'h1;
-localparam BUS_WAIT_LOAD = 2'h2;
+localparam BUS_IDLE = 1'h0;
+localparam BUS_WAIT = 1'h1;
 
 localparam INITIAL_PC = 32'h8000_0000;
 localparam N_REGS    = 16;
@@ -22,14 +21,15 @@ localparam OP_OR   = 4'b0110;
 localparam OP_AND  = 4'b0111; 
 localparam FUNCT3_SR      = 3'b101;
 
-localparam INST_LOAD_BYTE = 3'b000;
-localparam INST_LOAD_HALF = 3'b001;
-localparam INST_LOAD_WORD = 3'b010;
-localparam INST_STORE     = 3'b011;
-localparam INST_IMM       = 3'b100;
-localparam INST_REG       = 3'b101;
-localparam INST_UPP       = 3'b110;
-localparam INST_JUMP      = 3'b111;
+localparam INST_UNDEFINED = 4'b0000;
+localparam INST_LOAD_BYTE = 4'b1000;
+localparam INST_LOAD_HALF = 4'b1001;
+localparam INST_LOAD_WORD = 4'b1010;
+localparam INST_STORE     = 4'b1011;
+localparam INST_IMM       = 4'b1100;
+localparam INST_REG       = 4'b1101;
+localparam INST_UPP       = 4'b1110;
+localparam INST_JUMP      = 4'b1111;
 
 
 localparam FUNCT3_BYTE        = 3'b000;

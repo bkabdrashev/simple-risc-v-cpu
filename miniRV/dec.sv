@@ -11,7 +11,7 @@ module dec (
   output logic [3:0] mem_wbmask,
   output logic is_mem_sign,
   output logic ebreak,
-  output logic [2:0] inst_type
+  output logic [3:0] inst_type
 );
 /* verilator lint_off UNUSEDPARAM */
   `include "defs.vh"
@@ -58,11 +58,11 @@ module dec (
       OPCODE_LOAD: begin
         imm = i_imm;
         case (funct3)
-          FUNCT3_BYTE:        inst_type = {1'b0,funct3[1:0]};
-          FUNCT3_HALF:        inst_type = {1'b0,funct3[1:0]};
-          FUNCT3_WORD:        inst_type = {1'b0,funct3[1:0]};
-          FUNCT3_BYTE_UNSIGN: inst_type = {1'b0,funct3[1:0]};
-          FUNCT3_HALF_UNSIGN: inst_type = {1'b0,funct3[1:0]};
+          FUNCT3_BYTE:        inst_type = {2'b10,funct3[1:0]};
+          FUNCT3_HALF:        inst_type = {2'b10,funct3[1:0]};
+          FUNCT3_WORD:        inst_type = {2'b10,funct3[1:0]};
+          FUNCT3_BYTE_UNSIGN: inst_type = {2'b10,funct3[1:0]};
+          FUNCT3_HALF_UNSIGN: inst_type = {2'b10,funct3[1:0]};
           default:            inst_type = 0;        
         endcase
       end

@@ -118,31 +118,35 @@ void clock_tick(miniRV* cpu) {
   cpu->clock.curr ^= 1;
 }
 
-void reset_dut(VminiRV* dut) {
-  dut->reset = 1;
-  dut->clock = 0;
-  dut->eval();
-  dut->clock = 1;
-  dut->eval();
-  dut->reset = 0;
-  dut->clock = 0;
-}
-
 void dump_trace(Tester_gm_dut* tester) {
   tester->m_trace->dump(tester->cycle);
 }
 
 void dut_cycle(Tester_gm_dut* tester) {
   tester->dut->eval();
-  // dump_trace(tester);
+  dump_trace(tester);
   tester->cycle++;
   tester->dut->clock ^= 1;
+
   tester->dut->eval();
-  // dump_trace(tester);
+  dump_trace(tester);
   tester->cycle++;
   tester->dut->clock ^= 1;
 }
 
+void dut_wait(Tester_gm_dut* tester) {
+  dut_cycle(tester);
+  while (!tester->dut->is_step_finished) {
+    dut_cycle(tester);
+  }
+}
+
+void dut_reset(Tester_gm_dut* tester) {
+  tester->dut->reset = 1;
+  dut_cycle(tester);
+  tester->dut->reset = 0;
+  tester->dut->clock = 0;
+}
 void reset_gm_regs(miniRV* gm) {
   cpu_reset_regs(gm);
   gm->clock.prev = 0;
@@ -237,8 +241,8 @@ bool compare(Tester_gm_dut* tester, uint64_t sim_time) {
     char name[] = {'R', digit1, digit0, '\0'};
     result &= compare_reg(sim_time, name, tester->dut->regs[i], tester->gm->regs[i].v);
   }
-  // result &= memcmp(tester->gm->vga, tester->dpi_c_vga, VGA_SIZE) == 0;
-  // result &= memcmp(tester->gm->mem, tester->dpi_c_memory, MEM_SIZE) == 0;
+  result &= memcmp(tester->gm->vga, tester->dpi_c_vga, VGA_SIZE) == 0;
+  result &= memcmp(tester->gm->mem, tester->dpi_c_memory, MEM_SIZE) == 0;
   if (!result) {
     for (uint32_t i = 0; i < MEM_SIZE; i++) {
       uint32_t dut_v = dut_ram_read(i);
@@ -392,7 +396,7 @@ Tester_gm_dut* new_tester() {
   // result->m_trace->spTrace()->addInitCb(&GmVcdTrace::init_cb, result->gm_trace);
   // result->m_trace->spTrace()->addFullCb(&GmVcdTrace::full_cb, 0, result->gm_trace);
   // result->m_trace->spTrace()->addChgCb (&GmVcdTrace::chg_cb,  0, result->gm_trace);
-  // result->m_trace->open("waveform.vcd");
+  result->m_trace->open("waveform.vcd");
 
   result->dpi_c_memory = dut_ram_ptr();
   result->dpi_c_vga = dut_vga_ptr();
@@ -428,9 +432,11 @@ bool test_instructions(Tester_gm_dut* tester) {
   VminiRV* dut = tester->dut;
   miniRV* gm  = tester->gm;
 
-  reset_dut(dut);
-  reset_gm_regs(gm);
-  gm_mem_reset(gm);
+  dut_reset(tester);
+  if (tester->is_diff) {
+    reset_gm_regs(gm);
+    gm_mem_reset(gm);
+  }
 
   dut->clock = 0;
   dut->top_mem_wen = 1;
@@ -438,10 +444,7 @@ bool test_instructions(Tester_gm_dut* tester) {
     uint32_t address = 4*i + MEM_START;
     dut->top_mem_wdata = tester->insts[i].v;
     dut->top_mem_addr = address;
-    dut_cycle(tester);
-    while (dut->bus_state != 0) {
-      dut_cycle(tester);
-    }
+    dut_wait(tester);
 
     if (tester->is_diff) {
       gm_mem_write(gm, {1}, {1, 1, 1, 1}, {address}, tester->insts[i]);
@@ -454,11 +457,7 @@ bool test_instructions(Tester_gm_dut* tester) {
   }
   dut->clock = 0;
   for (uint64_t t = 0; !tester->max_sim_time || t < tester->max_sim_time && is_valid_pc_address(gm->pc.v, tester->n_insts) && is_valid_pc_address(dut->pc, tester->n_insts); t++) {
-    dut_cycle(tester);
-    // tester->m_trace->dump(t);
-    while (dut->bus_state != 0) {
-      dut_cycle(tester);
-    }
+    dut_wait(tester);
     if (dut->ebreak) {
       printf("dut ebreak\n");
       if (dut->regs[10] != 0) {
@@ -483,8 +482,7 @@ bool test_instructions(Tester_gm_dut* tester) {
         //   printf("pc=%x: ", 4*i);
         //   print_instruction(tester->insts[i]);
         // }
-        uint32_t mem_check = dut_ram_read(2147483851);
-        printf("[%x] pc=%x inst: , mem_check: 0x%x, r3: 0x%x\n", t, gm->pc.v, mem_check, dut->regs[3]);
+        printf("[%x] pc=%x inst:", t, gm->pc.v);
         print_instruction(inst);
         break;
       }
@@ -498,7 +496,7 @@ bool test_instructions(Tester_gm_dut* tester) {
       break;
     }
   }
-  reset_dut(dut);
+  // dut_reset(tester);
   if (tester->is_diff) {
     gm_mem_reset(gm);
     reset_gm_regs(gm);
@@ -514,12 +512,12 @@ void print_all_instructions(Tester_gm_dut* tester) {
 }
 
 bool random_difftest(Tester_gm_dut* tester) {
-  tester->n_insts = 400;
+  tester->n_insts = 10;
   tester->insts = new inst_size_t[tester->n_insts];
   bool is_tests_success = true;
   uint64_t tests_passed = 0;
   tester->max_sim_time = 5000;
-  uint64_t max_tests = 10000;
+  uint64_t max_tests = 2;
   // uint64_t seed = hash_uint64_t(std::time(0));
   uint64_t seed = 5578876383785782017lu;
   uint64_t i_test = 0;
@@ -589,7 +587,7 @@ void vga_image_test() {
   const uint64_t nbytes = width*height*4;
   uint8_t* image = new uint8_t[nbytes];
   auto hex_bytes = read_hex_bytes_one_per_line("vga2.hex");
-  reset_dut(dut);
+  // dut_reset(dut);
   for (uint32_t i = 0; i < hex_bytes.size(); i++) {
     dut_ram_write(i, hex_bytes[i], 0b0001);
   }

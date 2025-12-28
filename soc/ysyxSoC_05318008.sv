@@ -25,7 +25,7 @@ module ysyxSoC_05318008 (
   logic [REG_END_WORD:0] imm;
 
   logic [REG_END_WORD:0] pc;
-  logic [REG_END_WORD:0] pc_wen;
+  logic                  pc_wen;
   logic [REG_END_WORD:0] pc_next;
   logic [REG_END_WORD:0] pc_inc;
 

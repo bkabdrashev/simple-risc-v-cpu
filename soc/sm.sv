@@ -8,6 +8,7 @@ module sm (
   input  logic [3:0] inst_type,
 
   output logic reg_wen,
+  output logic pc_wen,
   output logic ifu_reqValid,
   output logic lsu_reqValid,
   output logic finished,

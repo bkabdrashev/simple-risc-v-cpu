@@ -87,7 +87,7 @@ module dec (
       end
       OPCODE_ENV: begin
         inst_type = 0;
-        // $finish();
+        $finish();
       end
       default: inst_type = 0;
     endcase

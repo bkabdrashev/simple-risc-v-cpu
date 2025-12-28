@@ -86,7 +86,7 @@ int main(int argc, char** argv, char** env) {
 
   uint8_t* data = NULL;
   size_t   size = 0;
-  read_bin_file("code2.bin", &data, &size);
+  read_bin_file("hello-minirv-ysyxsoc.bin", &data, &size);
   flash_init(data, (uint32_t)size);
 
   uint64_t max_sim_time = 100'000'000;
@@ -101,6 +101,7 @@ int main(int argc, char** argv, char** env) {
     cpu->eval();
     cpu->clock ^= 1;
     m_trace->dump(t);
+    if (cpu->
   }
   printf("exit\n");
 

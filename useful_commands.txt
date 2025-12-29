@@ -19,3 +19,6 @@ verilator --trace -cc \
   --exe tb_main.cpp c_dpi.cpp \
 && make -C obj_dir -f VysyxSoCTop.mk VysyxSoCTop \
 && ./obj_dir/VysyxSoCTop
+
+# Disassembly
+riscv64-unknown-elf-objdump -D   -b binary -m riscv:rv32   -M no-aliases,numeric   --adjust-vma=0x0   hello-minirv-ysyxsoc.bin > hello.S

@@ -78,6 +78,7 @@ int read_bin_file(const char* path, uint8_t** out_data, size_t* out_size) {
 extern "C" void flash_init(uint8_t* data, uint32_t size);
 
 int main(int argc, char** argv, char** env) {
+  VerilatedContext* contextp = new VerilatedContext;
   CPU* cpu = new CPU;
   Verilated::traceEverOn(true);
   VerilatedVcdC* m_trace = new VerilatedVcdC;
@@ -86,22 +87,42 @@ int main(int argc, char** argv, char** env) {
 
   uint8_t* data = NULL;
   size_t   size = 0;
-  read_bin_file("hello-minirv-ysyxsoc.bin", &data, &size);
+  /*
+   0:	555550b7          	lui	x1,0x55555
+   4:	00108093          	addi	x1,x1,1 # 0x55555001
+   8:	80000137          	lui	x2,0x80000
+   c:	00410113          	addi	x2,x2,4 # 0x80000004
+  10:	00112023          	sw	x1,0(x2)
+  14:	00012183          	lw	x3,0(x2)
+  18:	00100073          	ebreak
+    */
+  // read_bin_file("code2.bin", &data, &size);
+  // read_bin_file("hello-minirv-ysyxsoc.bin", &data, &size);
+  read_bin_file("new.bin", &data, &size);
   flash_init(data, (uint32_t)size);
 
-  uint64_t max_sim_time = 100'000'000;
+  uint64_t max_sim_time = 0;
+  uint64_t trace_period = 150;
   cpu->reset = 1;
+
+  cpu->clock = 0;
+  cpu->eval();
+  uint64_t counter = 0;
+  m_trace->dump(counter++);
+
   cpu->clock = 1;
   cpu->eval();
+  m_trace->dump(counter++);
+
   cpu->clock = 0;
   cpu->reset = 0;
 
-  cpu->clock = 0;
-  for (uint64_t t = 0; t < max_sim_time; t++) {
+  for (uint64_t t = 0; (!max_sim_time || t < max_sim_time) && !contextp->gotFinish(); t++) {
     cpu->eval();
     cpu->clock ^= 1;
-    m_trace->dump(t);
-    if (cpu->
+    if (t % trace_period == 0) {
+      m_trace->dump(counter++);
+    }
   }
   printf("exit\n");
 

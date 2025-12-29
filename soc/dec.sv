@@ -11,7 +11,6 @@ module dec (
   output logic [3:0]            mem_wbmask,
   output logic                  is_mem_sign,
   output logic [1:0]            mem_size,
-  output logic                  mem_wen,
   output logic [3:0]            inst_type
 );
 /* verilator lint_off UNUSEDPARAM */
@@ -101,7 +100,6 @@ module dec (
       default:        mem_size = 2'b00;
     endcase
 
-    mem_wen = inst_type == INST_STORE;
   end
 
 endmodule;

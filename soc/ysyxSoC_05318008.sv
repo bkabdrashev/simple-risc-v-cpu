@@ -47,9 +47,6 @@ module ysyxSoC_05318008 (
 
   logic [3:0]  inst_type;
 
-  logic [2:0] state;
-  logic       is_step_finished;
-
   logic reg_wen;
 
   pc u_pc(
@@ -71,7 +68,6 @@ module ysyxSoC_05318008 (
     .imm(imm),
     .mem_wbmask(io_lsu_wmask),
     .mem_size(io_lsu_size),
-    .mem_wen(io_lsu_wen),
     .inst_type(inst_type));
 
   alu u_alu(
@@ -98,18 +94,16 @@ module ysyxSoC_05318008 (
     .clock(clock),
     .reset(reset),
 
-    .in(state),
     .ifu_respValid(io_ifu_respValid),
     .lsu_respValid(io_lsu_respValid),
     .inst_type(inst_type),
 
     .reg_wen(reg_wen),
     .pc_wen(pc_wen),
+    .lsu_wen(io_lsu_wen),
 
     .ifu_reqValid(io_ifu_reqValid),
-    .lsu_reqValid(io_lsu_reqValid),
-    .finished(is_step_finished),
-    .out(state));
+    .lsu_reqValid(io_lsu_reqValid));
 
   always_comb begin
     pc_inc = pc + 4;

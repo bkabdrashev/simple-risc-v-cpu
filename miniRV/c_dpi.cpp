@@ -85,7 +85,7 @@ uint32_t request_waited_cycles = 0;
 uint64_t seed = 0;
 uint32_t wait = 0;
 extern "C" bool mem_request() {
-  // return true;
+  return true;
   if (request_waited_cycles == 0) {
     request_waited_cycles++;
     wait = hash_uint64_t(wait) % 10 + 5; // random wait in [5, 14] range

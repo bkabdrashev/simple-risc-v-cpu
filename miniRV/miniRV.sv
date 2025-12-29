@@ -51,10 +51,10 @@ module miniRV (
   logic lsu_reqValid;
   logic ifu_respValid;
   logic lsu_respValid;
-  logic [2:0] state;
 
   logic lsu_wen;
   logic reg_wen;
+  logic pc_wen;
 
   pc u_pc(
     .clock(clock),
@@ -124,15 +124,17 @@ module miniRV (
     .reset(reset),
     .top_mem_wen(top_mem_wen),
 
-    .in(state),
     .ifu_respValid(ifu_respValid),
     .lsu_respValid(lsu_respValid),
     .inst_type(inst_type),
 
+    .pc_wen(pc_wen),
+    .reg_wen(reg_wen),
+    .lsu_wen(lsu_wen),
+
     .ifu_reqValid(ifu_reqValid),
     .lsu_reqValid(lsu_reqValid),
-    .finished(is_step_finished),
-    .out(state));
+    .finished(is_step_finished));
 
   always_comb begin
     pc_inc = pc + 4;
@@ -167,18 +169,17 @@ module miniRV (
       INST_LOAD_HALF: reg_wdata = {mem_half_extend, mem_rdata[REG_END_HALF:0]};
       INST_LOAD_WORD: reg_wdata = mem_rdata;
       INST_UPP:       reg_wdata = imm;
-      INST_JUMP:      reg_wdata = pc;         
+      INST_JUMP:      reg_wdata = pc_inc;         
       INST_REG:       reg_wdata = alu_res;        
       INST_IMM:       reg_wdata = alu_res;        
       default:        reg_wdata = 0;
     endcase
 
-    lsu_wen = inst_type == INST_STORE || top_mem_wen;
-    reg_wen = state == STATE_REG;
-
-    if (state == STATE_REG && inst_type == INST_JUMP) pc_next = alu_res & ~3;
-    else if (!is_step_finished || top_mem_wen) pc_next = pc;
-    else pc_next = pc_inc;
+    if (pc_wen) begin
+       if (inst_type == INST_JUMP) pc_next = alu_res & ~3;
+       else pc_next = pc_inc;
+    end
+    else pc_next = pc;
 
     for (int i = 0; i < N_REGS; i++) begin
       regs[i] = rf_regs_out[i];

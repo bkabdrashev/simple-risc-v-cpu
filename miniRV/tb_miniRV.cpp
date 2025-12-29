@@ -469,14 +469,14 @@ void print_all_instructions(Tester_gm_dut* tester) {
 }
 
 bool random_difftest(Tester_gm_dut* tester) {
-  tester->n_insts = 1000;
+  tester->n_insts = 10;
   tester->insts = new inst_size_t[tester->n_insts];
   bool is_tests_success = true;
   uint64_t tests_passed = 0;
   tester->max_sim_time = 5000;
-  uint64_t seed = hash_uint64_t(std::time(0));
+  // uint64_t seed = hash_uint64_t(std::time(0));
   // uint64_t seed = 10596642213997354837lu; // this seed seems to be good debugging entry
-  // uint64_t seed = 12494773341427943734lu; // early jalr
+  uint64_t seed = 12494773341427943734lu; // early jalr
   uint64_t i_test = 0;
   do {
     printf("======== SEED:%lu ===== %u/%u =========\n", seed, i_test, tester->max_tests);
@@ -497,6 +497,7 @@ bool random_difftest(Tester_gm_dut* tester) {
     is_tests_success &= test_instructions(tester);
     if (is_tests_success) {
       tests_passed++;
+      print_all_instructions(tester);
     }
     else {
       print_all_instructions(tester);

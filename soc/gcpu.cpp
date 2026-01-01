@@ -10,20 +10,30 @@ struct Gcpu {
   uint8_t mem[MEM_SIZE];
   uint8_t flash[FLASH_SIZE];
 
+  uint8_t ebreak;
+
   uint8_t*  uart_status_ref;
   uint64_t* time_uptime_ref;
 };
 
-void reset(Gcpu* cpu) {
+void g_reset(Gcpu* cpu) {
   memset(cpu->mem, 0, MEM_SIZE);
   memset(cpu->flash, 0, FLASH_SIZE);
   cpu->pc = INITIAL_PC;
+  cpu->ebreak = 0;
   for (uint32_t i = 0; i < N_REGS; i++) {
     cpu->regs[i] = 0;
   }
 }
 
-void mem_write(Gcpu* cpu, uint8_t wen, uint8_t wbmask, uint32_t addr, uint32_t wdata) {
+void g_flash_init(Gcpu* cpu, uint8_t* data, uint32_t size) {
+  for (uint32_t i = 0; i < size; i++) {
+    cpu->flash[i] = data[i];
+  }
+  printf("[INFO] g flash written: %u bytes\n", size);
+}
+
+void g_mem_write(Gcpu* cpu, uint8_t wen, uint8_t wbmask, uint32_t addr, uint32_t wdata) {
   if (wen) {
     if (addr >= FLASH_START && addr < FLASH_END-3) {
       // addr -= FLASH_START;
@@ -48,7 +58,7 @@ void mem_write(Gcpu* cpu, uint8_t wen, uint8_t wbmask, uint32_t addr, uint32_t w
   }
 }
 
-uint32_t mem_read(Gcpu* cpu, uint32_t addr) {
+uint32_t g_mem_read(Gcpu* cpu, uint32_t addr) {
   uint32_t result = 0;
   if (addr >= FLASH_START && addr < FLASH_END-3) {
     addr -= FLASH_START;
@@ -160,7 +170,6 @@ Dec_out decode(uint32_t inst) {
   if (sign) s_imm = (~0u << 12) | top_imm | bot_imm;
   else      s_imm = ( 0u << 12) | top_imm | bot_imm;
 
-
   switch (opcode) {
     case OPCODE_CALC_IMM: {
       out.imm = i_imm;
@@ -202,7 +211,7 @@ Dec_out decode(uint32_t inst) {
     } break;
     case OPCODE_ENV: {
       out.inst_type = 0;
-      out.ebreak = 1;
+      out.ebreak = take_bit(inst, 20);
     } break;
     default: out.inst_type = 0; break;
   }
@@ -212,7 +221,7 @@ Dec_out decode(uint32_t inst) {
 }
 
 uint8_t cpu_eval(Gcpu* cpu) {
-  uint32_t inst = mem_read(cpu, cpu->pc);
+  uint32_t inst = g_mem_read(cpu, cpu->pc);
   Dec_out  dec  = decode(inst);
   RF_out   rf   = rf_read(cpu, dec.reg_src1, dec.reg_src2);
 
@@ -230,7 +239,7 @@ uint8_t cpu_eval(Gcpu* cpu) {
   }
   uint32_t alu_res = alu_eval(dec.alu_op, rf.rdata1, alu_rhs);
 
-  uint32_t mem_rdata = mem_read(cpu, alu_res);
+  uint32_t mem_rdata = g_mem_read(cpu, alu_res);
   uint32_t mem_rdata_byte = take_bits_range(mem_rdata, 0, 7);
   uint32_t mem_rdata_half = take_bits_range(mem_rdata, 0, 15);
   uint32_t mem_rdata_byte_sign = take_bit(mem_rdata, 7)  && dec.is_mem_sign;
@@ -255,7 +264,8 @@ uint8_t cpu_eval(Gcpu* cpu) {
   }
 
   rf_write(cpu, reg_wen, dec.reg_dest, reg_wdata);
-  mem_write(cpu, mem_wen, dec.mem_wbmask, alu_res, rf.rdata2);
+  g_mem_write(cpu, mem_wen, dec.mem_wbmask, alu_res, rf.rdata2);
   pc_write(cpu, alu_res, pc_jump);
+  cpu->ebreak = dec.ebreak;
   return dec.ebreak;
 }

@@ -9,6 +9,7 @@ module sm (
   input  logic [3:0] inst_type,
 
   output logic finished,
+  output logic ebreak,
   output logic reg_wen,
   output logic pc_wen,
   output logic lsu_wen,
@@ -22,6 +23,7 @@ module sm (
   logic [2:0] state;
   logic [2:0] next;
   logic       next_finished;
+  logic       next_ebreak;
   logic ifu_inflight, lsu_inflight;
 
   // NOTE: this piece of code handles edges cases where ifu is requested but sudden reset was done. Then inflight becomes 0 and ifu_respValid is ignored
@@ -42,10 +44,12 @@ module sm (
     if (reset) begin
       state <= STATE_START;
       finished <= 0;
+      ebreak <= 0;
     end
     else       begin
       state <= next;
       finished <= next_finished;
+      ebreak <= ebreak ? 1 : next_ebreak;
     end
   end
 
@@ -56,6 +60,7 @@ module sm (
     reg_wen = 0;
     lsu_wen = 0;
     next_finished = 0;
+    next_ebreak = 0;
     unique case (state)
       STATE_START: begin
         // if (counter == 10) begin
@@ -78,11 +83,12 @@ module sm (
             INST_LOAD_HALF: begin next = STATE_LOAD;  lsu_reqValid = 1; end 
             INST_LOAD_WORD: begin next = STATE_LOAD;  lsu_reqValid = 1; end 
             INST_STORE:     begin next = STATE_STORE; lsu_reqValid = 1; lsu_wen = 1; end 
-            default:        begin next = STATE_EXEC;  reg_wen = 1;      end
+            default:        begin next = STATE_EXEC; reg_wen = 1;       end
           endcase
         end
         else begin
           next = STATE_FETCH;
+          ifu_reqValid = 1;
         end
       end
       STATE_LOAD: begin
@@ -90,7 +96,10 @@ module sm (
           next = STATE_EXEC; reg_wen = 1;
           if (lsu_addr == 'h1000_0005 && |lsu_rdata) $display("uart lsr: %b", lsu_rdata);
         end
-        else next = STATE_LOAD;
+        else begin
+          next = STATE_LOAD;
+          lsu_reqValid = 1;
+        end
       end
       STATE_STORE: begin
         if (lsu_respValid && lsu_inflight) begin
@@ -100,6 +109,7 @@ module sm (
         end
         else begin
           next = STATE_STORE;
+          lsu_reqValid = 1;
         end
       end
       STATE_EXEC: begin
@@ -112,6 +122,8 @@ module sm (
         next = STATE_FETCH;
       end
     endcase
+
+    if (inst_type == INST_EBREAK && next == STATE_EXEC) next_ebreak = 1;
   end
 
 `ifdef verilator

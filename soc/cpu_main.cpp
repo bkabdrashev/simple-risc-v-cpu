@@ -9,6 +9,7 @@
 #include <limits.h>  // SIZE_MAX
 
 #include "riscv.cpp"
+#include "c_dpi.h"
 #include "gcpu.cpp"
 
 int read_bin_file(const char* path, uint8_t** out_data, size_t* out_size) {
@@ -76,8 +77,6 @@ int read_bin_file(const char* path, uint8_t** out_data, size_t* out_size) {
   return 1;
 }
 
-extern "C" void flash_init(uint8_t* data, uint32_t size);
-
 struct TestBenchConfig {
   bool is_trace  = false;
   char* trace_file;
@@ -107,6 +106,10 @@ struct TestBench {
   VerilatedContext* contextp;
   Vcpu* vcpu;
   Gcpu* gcpu;
+
+  uint8_t* vmem;
+  uint8_t* vflash;
+
   VerilatedVcdC* trace;
   uint64_t cycles;
 
@@ -134,7 +137,7 @@ void cycle(TestBench* tb) {
   tick(tb);
 }
 
-void reset(TestBench* tb) {
+void v_reset(TestBench* tb) {
   printf("[INFO] reset\n");
   tb->vcpu->reset = 1;
   tb->vcpu->clock = 0;
@@ -154,30 +157,163 @@ void run(TestBench* tb) {
   tb->vcpu->reset = 0;
 }
 
+uint32_t v_mem_read(TestBench* tb, uint32_t addr) {
+  uint32_t result = 0;
+  // printf("addr: 0x%x, result: %u\n", addr, result);
+  if (addr >= FLASH_START && addr < FLASH_END-3) {
+    addr -= FLASH_START;
+    result = 
+      tb->vflash[addr+3] << 24 | tb->vflash[addr+2] << 16 |
+      tb->vflash[addr+1] <<  8 | tb->vflash[addr+0] <<  0 ;
+  }
+  else if (addr >= MEM_START && addr < MEM_END-3) {
+    addr -= MEM_START;
+    result = 
+      tb->vmem[addr+3] << 24 | tb->vmem[addr+2] << 16 |
+      tb->vmem[addr+1] <<  8 | tb->vmem[addr+0] <<  0 ;
+  }
+  else {
+    // printf("GM WARNING: mem read memory is not mapped\n");
+  }
+  return result;
+}
+
+void v_mem_write(TestBench* tb, uint8_t wen, uint8_t wbmask, uint32_t addr, uint32_t wdata) {
+  if (wen) {
+    if (addr >= FLASH_START && addr < FLASH_END-3) {
+      // addr -= FLASH_START;
+      // if (wbmask & 0b0001) cpu->flash[addr + 0] = (wdata & (0xff <<  0)) >> 0;
+      // if (wbmask & 0b0010) cpu->flash[addr + 1] = (wdata & (0xff <<  8)) >> 8;
+      // if (wbmask & 0b0100) cpu->flash[addr + 2] = (wdata & (0xff << 16)) >> 16;
+      // if (wbmask & 0b1000) cpu->flash[addr + 3] = (wdata & (0xff << 24)) >> 23;
+    }
+    else if (addr >= MEM_START && addr < MEM_END-3) {
+      addr -= MEM_START;
+      if (wbmask & 0b0001) tb->vmem[addr + 0] = (wdata & (0xff <<  0)) >> 0;
+      if (wbmask & 0b0010) tb->vmem[addr + 1] = (wdata & (0xff <<  8)) >> 8;
+      if (wbmask & 0b0100) tb->vmem[addr + 2] = (wdata & (0xff << 16)) >> 16;
+      if (wbmask & 0b1000) tb->vmem[addr + 3] = (wdata & (0xff << 24)) >> 23;
+    }
+    // else if (addr.v == UART_DATA_ADDR) {
+    //   putc(write_data.v & 0xff, stderr);
+    // }
+    else {
+      // printf("GM WARNING: mem write memory is not mapped\n");
+    }
+  }
+}
+
 void fetch_exec(TestBench* tb) {
-  tb->vcpu->clock = 0;
   while (1) {
+    cycle(tb);
     if (tb->max_cycles && tb->cycles >= tb->max_cycles) break;
     if (tb->contextp->gotFinish()) break;
     if (tb->vcpu->is_done_instruction) break;
-    cycle(tb);
+
+    if (tb->vcpu->io_ifu_reqValid) {
+      tb->vcpu->io_ifu_respValid = 1;
+      tb->vcpu->io_ifu_rdata = v_mem_read(tb, tb->vcpu->io_ifu_addr);
+    }
+    else {
+      tb->vcpu->io_ifu_respValid = 0;
+      if (tb->vcpu->io_lsu_reqValid) {
+        tb->vcpu->io_lsu_respValid = 1;
+        v_mem_write(tb, tb->vcpu->io_lsu_wen, tb->vcpu->io_lsu_wmask, tb->vcpu->io_lsu_addr, tb->vcpu->io_lsu_wdata);
+        tb->vcpu->io_lsu_rdata = v_mem_read(tb, tb->vcpu->io_lsu_addr);
+      }
+      else {
+        tb->vcpu->io_lsu_respValid = 0;
+      }
+    }
   }
-  tb->vcpu->reset = 0;
+}
+
+bool compare_reg(uint64_t sim_time, const char* name, uint32_t v, uint32_t g) {
+  if (v != g) {
+    printf("[FAILED] Test Failed at time %lu. %s mismatch: v = 0x%x vs g = 0x%x\n", sim_time, name, v, g);
+    return false;
+  }
+  return true;
+}
+
+bool compare_mem(uint64_t sim_time, uint32_t address, uint32_t v, uint32_t g) {
+  if (v != g) {
+    printf("[FAILED] Test Failed at time %lu. %x mismatch: v = %i vs g = %i\n", sim_time, address, v, g);
+    return false;
+  }
+  return true;
+}
+
+bool compare(TestBench* tb) {
+  bool result = true;
+  result &= compare_reg(tb->cycles, "EBREAK", tb->vcpu->ebreak, tb->gcpu->ebreak);
+  result &= compare_reg(tb->cycles, "PC",     tb->vcpu->pc,     tb->gcpu->pc);
+  for (uint32_t i = 0; i < N_REGS; i++) {
+    char digit0 = i%10 + '0';
+    char digit1 = i/10 + '0';
+    char name[] = {'x', digit1, digit0, '\0'};
+    result &= compare_reg(tb->cycles, name, tb->vcpu->regs[i], tb->gcpu->regs[i]);
+  }
+  result &= memcmp(tb->gcpu->flash, tb->vflash, FLASH_SIZE) == 0;
+  result &= memcmp(tb->gcpu->mem,   tb->vmem,   MEM_SIZE) == 0;
+  if (!result) {
+    for (uint32_t i = 0; i < MEM_SIZE; i++) {
+      uint32_t v = tb->vmem[i];
+      uint32_t g = tb->gcpu->mem[i];
+      result &= compare_mem(tb->cycles, i, v, g);
+    }
+    for (uint32_t i = 0; i < FLASH_SIZE; i++) {
+      uint32_t v = tb->vflash[i];
+      uint32_t g = tb->gcpu->flash[i];
+      result &= compare_mem(tb->cycles, i, v, g);
+    }
+  }
+  return result;
 }
 
 bool test_instructions(TestBench* tb) {
-  bool is_test_success = true;
   tb->cycles = 0;
-  reset(tb);
+  v_reset(tb);
+  g_reset(tb->gcpu);
+
+  flash_init((uint8_t*)tb->insts, tb->file_size);
+  if (tb->is_diff) {
+    g_flash_init(tb->gcpu, (uint8_t*)tb->insts, tb->file_size);
+  }
+  bool is_test_success = true;
   while (1) {
     fetch_exec(tb);
-    if (tb->contextp->gotFinish()) {
+    if (tb->vcpu->ebreak) {
       printf("[INFO] vcpu ebreak\n");
       if (tb->vcpu->regs[10] != 0) {
-        printf("[FAILED] test is not successful: returned %u\n", tb->vcpu->regs[10]);
+        printf("[FAILED] test is not successful: vcpu returned %u\n", tb->vcpu->regs[10]);
         is_test_success=false;
       }
     }
+
+    if (tb->is_diff) {
+      uint32_t pc = tb->gcpu->pc;
+      uint32_t inst = g_mem_read(tb->gcpu, tb->gcpu->pc);
+      uint8_t ebreak = cpu_eval(tb->gcpu);
+      if (ebreak) {
+        printf("[INFO] gcpu ebreak\n");
+        if (tb->gcpu->regs[10] != 0) {
+          printf("[FAILED] test is not successful: gcpu returned %u\n", tb->gcpu->regs[10]);
+          is_test_success=false;
+        }
+      }
+      is_test_success &= compare(tb);
+      if (!is_test_success) {
+        printf("[%x] pc=%x inst: [0x%x] ", tb->cycles, pc, inst);
+        print_instruction(inst);
+        break;
+      }
+      if (tb->vcpu->ebreak && tb->gcpu->ebreak) break;
+    }
+    else if (tb->vcpu->ebreak) {
+      break;
+    }
+
     if (tb->max_cycles && tb->cycles >= tb->max_cycles) {
       printf("[FAILED] test is not successful: timeout %u/%u\n", tb->cycles, tb->max_cycles);
       is_test_success=false;
@@ -189,8 +325,15 @@ bool test_instructions(TestBench* tb) {
 }
 
 bool test_bin(TestBench* tb) {
-  bool is_test_success = true;
-  return is_test_success;
+  uint8_t* data = NULL; size_t size = 0;
+  int ok = read_bin_file(tb->bin_file, &data, &size);
+  if (!ok) return false;
+
+  tb->file_size = size;
+  tb->n_insts = size/4;
+  tb->insts = (uint32_t*)data;
+
+  return test_instructions(tb);
 }
 
 bool test_random(TestBench* tb) {
@@ -215,7 +358,7 @@ void simple_lw_sw_test(TestBench* tb) {
     tb->insts[i] = insts[i];
   }
 
-  reset(tb);
+  v_reset(tb);
   run(tb);
 }
 
@@ -248,6 +391,10 @@ TestBench new_testbench(TestBenchConfig config) {
   tb.contextp = new VerilatedContext;
   tb.vcpu  = new Vcpu;
   tb.gcpu  = new Gcpu;
+  tb.vmem = (uint8_t*)malloc(MEM_SIZE);
+  tb.vflash = vflash;
+  // tb->vuart  = uart;
+  // tb->vtime  = time;
 
   if (tb.is_trace) {
     Verilated::traceEverOn(true);
@@ -266,6 +413,7 @@ void delete_testbench(TestBench tb) {
     tb.trace->close();
     delete tb.trace;
   }
+  free(tb.vmem);
   delete tb.vcpu;
   delete tb.gcpu;
   delete tb.contextp;

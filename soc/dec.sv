@@ -11,8 +11,7 @@ module dec (
   output logic [3:0]            mem_wbmask,
   output logic                  is_mem_sign,
   output logic [1:0]            mem_size,
-  output logic [3:0]            inst_type
-);
+  output logic [3:0]            inst_type);
 /* verilator lint_off UNUSEDPARAM */
   `include "./soc/defs.vh"
 /* verilator lint_on UNUSEDPARAM */
@@ -86,8 +85,8 @@ module dec (
         inst_type = INST_JUMP;
       end
       OPCODE_ENV: begin
-        inst_type = 0;
-        $finish();
+        if (inst[20]) inst_type = INST_EBREAK;
+        else inst_type = 0;
       end
       default: inst_type = 0;
     endcase

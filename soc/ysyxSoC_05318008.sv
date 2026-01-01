@@ -35,6 +35,7 @@ cpu u_cpu(
   .io_lsu_wmask(io_lsu_wmask),
    .regs(/* unused */),
    .pc(/* unused */),
+   .ebreak(/* unused */),
    .is_done_instruction(/* unused */));
 
 endmodule;

@@ -17,7 +17,8 @@ module cpu (
   output [3:0]  io_lsu_wmask,
   output logic [REG_END_WORD:0] regs [0:N_REGS-1],
   output logic [REG_END_WORD:0] pc,
-  output logic is_done_instruction);
+  output logic                  ebreak,
+  output logic                  is_done_instruction);
 /* verilator lint_off UNUSEDPARAM */
   `include "./soc/defs.vh"
 /* verilator lint_on UNUSEDPARAM */
@@ -110,7 +111,8 @@ module cpu (
 
     .ifu_reqValid(io_ifu_reqValid),
     .lsu_reqValid(io_lsu_reqValid),
-    .finished(is_done_instruction));
+    .finished(is_done_instruction),
+    .ebreak(ebreak));
 
   always_comb begin
     pc_inc = pc + 4;

@@ -28,6 +28,7 @@ localparam OP_AND  = 4'b0111;
 localparam FUNCT3_SR      = 3'b101;
 
 localparam INST_UNDEFINED = 4'b0000;
+localparam INST_EBREAK    = 4'b0001;
 localparam INST_LOAD_BYTE = 4'b1000;
 localparam INST_LOAD_HALF = 4'b1001;
 localparam INST_LOAD_WORD = 4'b1010;

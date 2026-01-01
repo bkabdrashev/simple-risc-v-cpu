@@ -110,6 +110,7 @@ module sm (
         else begin
           next = STATE_STORE;
           lsu_reqValid = 1;
+          lsu_wen = 1;
         end
       end
       STATE_EXEC: begin

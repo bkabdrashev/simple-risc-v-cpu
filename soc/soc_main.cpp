@@ -206,12 +206,12 @@ TestBench new_testbench(TestBenchConfig config) {
     .bin_file   = config.bin_file,
     .max_cycles = config.max_cycles,
   };
-  tb.contextp = (VerilatedContext*)malloc(sizeof(VerilatedContext));
+  tb.contextp = new VerilatedContext;
+  tb.soc = new SoC;
 
-  tb.soc = (SoC*)malloc(sizeof(SoC));
   if (tb.is_trace) {
     Verilated::traceEverOn(true);
-    tb.trace = (VerilatedVcdC*)malloc(sizeof(VerilatedVcdC));
+    tb.trace = new VerilatedVcdC;
     tb.soc->trace(tb.trace, 5);
     tb.trace->open(tb.trace_file);
   }
@@ -224,10 +224,10 @@ void delete_testbench(TestBench tb) {
   }
   if (tb.is_trace) {
     tb.trace->close();
-    free(tb.trace);
+    delete tb.trace;
   }
-  free(tb.soc);
-  free(tb.contextp);
+  delete tb.soc;
+  delete tb.contextp;
 }
 
 int main(int argc, char** argv, char** env) {

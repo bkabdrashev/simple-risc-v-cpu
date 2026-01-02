@@ -3,6 +3,7 @@
 #include "c_dpi.h"
 #include "mem_map.h"
 
+struct TestBench;
 struct Gcpu {
   uint32_t pc = INITIAL_PC;
   uint32_t regs[N_REGS];
@@ -12,8 +13,7 @@ struct Gcpu {
 
   uint8_t ebreak;
 
-  uint8_t*  uart_status_ref;
-  uint64_t* time_uptime_ref;
+  TestBench*  tb;
 };
 
 void g_reset(Gcpu* cpu) {
@@ -36,28 +36,25 @@ void g_flash_init(Gcpu* cpu, uint8_t* data, uint32_t size) {
 void g_mem_write(Gcpu* cpu, uint8_t wen, uint8_t wbmask, uint32_t addr, uint32_t wdata) {
   if (wen) {
     if (addr >= FLASH_START && addr < FLASH_END-3) {
-      // addr -= FLASH_START;
-      // if (wbmask & 0b0001) cpu->flash[addr + 0] = (wdata & (0xff <<  0)) >> 0;
-      // if (wbmask & 0b0010) cpu->flash[addr + 1] = (wdata & (0xff <<  8)) >> 8;
-      // if (wbmask & 0b0100) cpu->flash[addr + 2] = (wdata & (0xff << 16)) >> 16;
-      // if (wbmask & 0b1000) cpu->flash[addr + 3] = (wdata & (0xff << 24)) >> 23;
+      // printf("[WARNING]: flash write memory\n");
     }
     else if (addr >= MEM_START && addr < MEM_END-3) {
       addr -= MEM_START;
-      if (wbmask & 0b0001) cpu->mem[addr + 0] = (wdata & (0xff <<  0)) >> 0;
-      if (wbmask & 0b0010) cpu->mem[addr + 1] = (wdata & (0xff <<  8)) >> 8;
-      if (wbmask & 0b0100) cpu->mem[addr + 2] = (wdata & (0xff << 16)) >> 16;
-      if (wbmask & 0b1000) cpu->mem[addr + 3] = (wdata & (0xff << 24)) >> 23;
+      if (wbmask & 0b0001) cpu->mem[addr + 0] = (wdata >>  0) & 0xff;
+      if (wbmask & 0b0010) cpu->mem[addr + 1] = (wdata >>  8) & 0xff;
+      if (wbmask & 0b0100) cpu->mem[addr + 2] = (wdata >> 16) & 0xff;
+      if (wbmask & 0b1000) cpu->mem[addr + 3] = (wdata >> 24) & 0xff;
     }
     // else if (addr.v == UART_DATA_ADDR) {
     //   putc(write_data.v & 0xff, stderr);
     // }
     else {
-      // printf("GM WARNING: mem write memory is not mapped\n");
+      // printf("[WARNING]: mem write memory is not mapped\n");
     }
   }
 }
 
+uint32_t v_mem_read(TestBench* tb, uint32_t addr);
 uint32_t g_mem_read(Gcpu* cpu, uint32_t addr) {
   uint32_t result = 0;
   if (addr >= FLASH_START && addr < FLASH_END-3) {
@@ -65,6 +62,9 @@ uint32_t g_mem_read(Gcpu* cpu, uint32_t addr) {
     result = 
       cpu->flash[addr+3] << 24 | cpu->flash[addr+2] << 16 |
       cpu->flash[addr+1] <<  8 | cpu->flash[addr+0] <<  0 ;
+  }
+  else if (addr >= UART_START && addr < UART_END-3) {
+    result = v_mem_read(cpu->tb, addr);
   }
   else if (addr >= MEM_START && addr < MEM_END-3) {
     addr -= MEM_START;
@@ -259,7 +259,7 @@ uint8_t cpu_eval(Gcpu* cpu) {
     case INST_JUMP:      pc_jump = 1; mem_wen = 0; reg_wen = 1; reg_wdata = cpu->pc+4;       break;
     case INST_REG:       pc_jump = 0; mem_wen = 0; reg_wen = 1; reg_wdata = alu_res;         break;
     case INST_IMM:       pc_jump = 0; mem_wen = 0; reg_wen = 1; reg_wdata = alu_res;         break;
-    case INST_STORE:     pc_jump = 0; mem_wen = 1; reg_wen = 1; reg_wdata = 0;               break;
+    case INST_STORE:     pc_jump = 0; mem_wen = 1; reg_wen = 0; reg_wdata = 0;               break;
     default:             pc_jump = 0; mem_wen = 0; reg_wen = 0; reg_wdata = 0;               break;
   }
 

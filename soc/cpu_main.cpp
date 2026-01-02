@@ -109,6 +109,8 @@ struct TestBench {
 
   uint8_t* vmem;
   uint8_t* vflash;
+  uint8_t* vuart;
+  uint8_t* vtime;
 
   VerilatedVcdC* trace;
   uint64_t cycles;
@@ -128,8 +130,8 @@ void print_all_instructions(TestBench* tb) {
 void tick(TestBench* tb) {
   tb->vcpu->eval();
   if (tb->is_trace) tb->trace->dump(tb->cycles);
+  if (tb->is_cycles && tb->cycles % 1'000'000 == 0) printf("[INFO] %u cycles\n", tb->cycles);
   tb->cycles++;
-  if (tb->cycles % 1'000'000 == 0) printf("[INFO] %u cycles\n", tb->cycles);
   tb->vcpu->clock ^= 1;
 }
 
@@ -146,6 +148,13 @@ void v_reset(TestBench* tb) {
     cycle(tb);
   }
   tb->vcpu->reset = 0;
+
+  memset(tb->vuart, 0, UART_SIZE);
+  tb->vuart[1] = 0b0000'0000;
+  tb->vuart[2] = 0b1100'0000;
+  tb->vuart[3] = 0b0000'0011;
+  tb->vuart[4] = 0b0000'0000;
+  tb->vuart[5] = 0b0010'0000;
 }
 
 void run(TestBench* tb) {
@@ -161,20 +170,26 @@ void run(TestBench* tb) {
 uint32_t v_mem_read(TestBench* tb, uint32_t addr) {
   uint32_t result = 0;
   if (addr >= FLASH_START && addr < FLASH_END-3) {
+    addr &= ~3;
     addr -= FLASH_START;
     result = 
       tb->vflash[addr+3] << 24 | tb->vflash[addr+2] << 16 |
       tb->vflash[addr+1] <<  8 | tb->vflash[addr+0] <<  0 ;
   }
+  if (addr >= UART_START && addr < UART_END-3) {
+    addr -= UART_START;
+    uint8_t byte = 0;
+    byte = tb->vuart[addr];
+    result = 
+      byte << 24 | byte << 16 |
+      byte <<  8 | byte <<  0 ;
+  }
   else if (addr >= MEM_START && addr < MEM_END-3) {
+    addr &= ~3;
     addr -= MEM_START;
     result = 
       tb->vmem[addr+3] << 24 | tb->vmem[addr+2] << 16 |
       tb->vmem[addr+1] <<  8 | tb->vmem[addr+0] <<  0 ;
-    if (addr+MEM_START == 0x81efffd0) {
-      // printf("addr: 0x%x, result: %u\n", addr, result);
-      // getchar();
-    }
   }
   else {
     // printf("GM WARNING: mem read memory is not mapped\n");
@@ -189,18 +204,31 @@ void v_mem_write(TestBench* tb, uint8_t wen, uint8_t wbmask, uint32_t addr, uint
       // if (wbmask & 0b0001) cpu->flash[addr + 0] = (wdata & (0xff <<  0)) >> 0;
       // if (wbmask & 0b0010) cpu->flash[addr + 1] = (wdata & (0xff <<  8)) >> 8;
       // if (wbmask & 0b0100) cpu->flash[addr + 2] = (wdata & (0xff << 16)) >> 16;
-      // if (wbmask & 0b1000) cpu->flash[addr + 3] = (wdata & (0xff << 24)) >> 23;
+      // if (wbmask & 0b1000) cpu->flash[addr + 3] = (wdata & (0xff << 24)) >> 24;
+    }
+    else if (addr >= UART_START && addr < UART_END-3) {
+      addr -= UART_START;
+      uint8_t byte = 0;
+      switch (addr & 0b11) {
+        case 0b00 : byte = (wdata >>  0) & 0xff; break;
+        case 0b01 : byte = (wdata >>  8) & 0xff; break;
+        case 0b10 : byte = (wdata >> 16) & 0xff; break;
+        case 0b11 : byte = (wdata >> 24) & 0xff; break;
+      }
+      if (addr == 0) {
+        fputc(byte, stderr);
+      }
+      else if (addr != 5 && addr != 6) {
+        tb->vuart[addr] = byte;
+      }
     }
     else if (addr >= MEM_START && addr < MEM_END-3) {
+      addr &= ~3;
       addr -= MEM_START;
       if (wbmask & 0b0001) tb->vmem[addr + 0] = (wdata >>  0) & 0xff;
       if (wbmask & 0b0010) tb->vmem[addr + 1] = (wdata >>  8) & 0xff;
       if (wbmask & 0b0100) tb->vmem[addr + 2] = (wdata >> 16) & 0xff;
       if (wbmask & 0b1000) tb->vmem[addr + 3] = (wdata >> 24) & 0xff;
-      if (addr+MEM_START == 0x81efffd0) {
-        // printf("write addr: 0x%x, wdata: %u, 0x%x\n", addr, wdata, wbmask);
-        // getchar();
-      }
     }
     // else if (addr.v == UART_DATA_ADDR) {
     //   putc(write_data.v & 0xff, stderr);
@@ -399,7 +427,8 @@ TestBench new_testbench(TestBenchConfig config) {
   tb.contextp = new VerilatedContext;
   tb.vcpu  = new Vcpu;
   tb.gcpu  = new Gcpu;
-  tb.vmem = (uint8_t*)malloc(MEM_SIZE);
+  tb.vmem  = (uint8_t*)malloc(MEM_SIZE);
+  tb.vuart = (uint8_t*)malloc(UART_SIZE);
   tb.vflash = vflash;
   // tb->vuart  = uart;
   // tb->vtime  = time;
@@ -422,6 +451,7 @@ void delete_testbench(TestBench tb) {
     delete tb.trace;
   }
   free(tb.vmem);
+  free(tb.vuart);
   delete tb.vcpu;
   delete tb.gcpu;
   delete tb.contextp;
@@ -517,6 +547,8 @@ int main(int argc, char** argv, char** env) {
       }
     }
     TestBench tb = new_testbench(config);
+    tb.gcpu->tb = &tb;
+
 
     if (tb.is_bin && tb.is_random) {
       printf("[WARNING] bin test and random test together are not supported: doing only bin test\n");

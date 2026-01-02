@@ -138,14 +138,13 @@ module cpu (
     half2 = reg_rdata2[15:0];
 
     lsu_size  = 0;
-    lsu_addr  = 0;
     lsu_wdata = 0;
     lsu_rdata = 0;
     lsu_wmask = 0;
+    lsu_addr = alu_res;
 
     case (inst_type)
       INST_STORE_BYTE: begin
-        lsu_addr = alu_res;
         case (alu_res[1:0])
           2'b00: begin lsu_wmask = 4'b0001; lsu_wdata = {8'b0, 8'b0, 8'b0, byte2}; end
           2'b01: begin lsu_wmask = 4'b0010; lsu_wdata = {8'b0, 8'b0, byte2, 8'b0}; end
@@ -154,7 +153,6 @@ module cpu (
         endcase
       end
       INST_STORE_HALF: begin
-        lsu_addr = alu_res;
         case (alu_res[1:0])
           2'b00: begin lsu_wmask = 4'b0011; lsu_wdata = {8'b0, 8'b0, half2}; end
           2'b01: begin lsu_wmask = 4'b0110; lsu_wdata = {8'b0, half2, 8'b0}; end
@@ -163,7 +161,6 @@ module cpu (
         endcase
       end
       INST_STORE_WORD: begin
-        lsu_addr = alu_res;
         case (alu_res[1:0])
           2'b00: begin lsu_wmask = 4'b1111; lsu_wdata = reg_rdata2; end
           2'b01: begin lsu_wmask = 4'b0000; lsu_wdata = 32'b0; end // TODO: exceptional case
@@ -173,27 +170,24 @@ module cpu (
       end
       INST_LOAD_BYTE: begin
         lsu_size = 2'b10;
-        lsu_addr = {alu_res[31:2], 2'b00}; 
         case (alu_res[1:0])
-          2'b00: begin lsu_rdata = {8'b0, 8'b0, 8'b0, io_lsu_rdata[ 7: 0]}; end
-          2'b01: begin lsu_rdata = {8'b0, 8'b0, io_lsu_rdata[15: 8], 8'b0}; end
-          2'b10: begin lsu_rdata = {8'b0, io_lsu_rdata[23:16], 8'b0, 8'b0}; end
-          2'b11: begin lsu_rdata = {io_lsu_rdata[31:24], 8'b0, 8'b0, 8'b0}; end
+          2'b00: begin lsu_rdata = {24'b0, io_lsu_rdata[ 7: 0]}; end
+          2'b01: begin lsu_rdata = {24'b0, io_lsu_rdata[15: 8]}; end
+          2'b10: begin lsu_rdata = {24'b0, io_lsu_rdata[23:16]}; end
+          2'b11: begin lsu_rdata = {24'b0, io_lsu_rdata[31:24]}; end
         endcase
       end
       INST_LOAD_HALF: begin
         lsu_size = 2'b10;
-        lsu_addr = {alu_res[31:2], 2'b00}; 
         case (alu_res[1:0])
-          2'b00: begin lsu_rdata = {8'b0, 8'b0, io_lsu_rdata[15: 0]}; end
-          2'b01: begin lsu_rdata = {8'b0, io_lsu_rdata[23: 8], 8'b0}; end
-          2'b10: begin lsu_rdata = {io_lsu_rdata[31:16], 8'b0, 8'b0}; end
+          2'b00: begin lsu_rdata = {16'b0, io_lsu_rdata[15: 0]}; end
+          2'b01: begin lsu_rdata = {16'b0, io_lsu_rdata[23: 8]}; end
+          2'b10: begin lsu_rdata = {16'b0, io_lsu_rdata[31:16]}; end
           2'b11: begin lsu_rdata = 32'b0; end // TODO: exceptional case
         endcase
       end
       INST_LOAD_WORD: begin
         lsu_size = 2'b10;
-        lsu_addr = {alu_res[31:2], 2'b00}; 
         case (alu_res[1:0])
           2'b00: begin lsu_rdata = io_lsu_rdata; end
           2'b01: begin lsu_rdata = 32'b0; end // TODO: exceptional case

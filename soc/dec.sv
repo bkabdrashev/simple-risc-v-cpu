@@ -67,7 +67,10 @@ module dec (
         inst_type = INST_JUMP;
       end
       OPCODE_ENV: begin
-        if (inst[20]) inst_type = INST_EBREAK;
+        if (inst[20]) begin
+          $finish();
+          inst_type = INST_EBREAK;
+        end
         else inst_type = 0;
       end
       default: inst_type = 0;

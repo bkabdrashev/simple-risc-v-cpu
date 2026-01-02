@@ -117,10 +117,12 @@ void print_all_instructions(TestBench* tb) {
 
 void tick(TestBench* tb) {
   tb->soc->eval();
-  if (tb->is_trace) tb->trace->dump(tb->cycles);
   tb->cycles++;
   tb->soc->clock ^= 1;
-  if (tb->is_cycles && tb->cycles % 1'000'000 == 0) printf("[INFO] cycles: %lu\n", tb->cycles);
+  if (tb->is_cycles && tb->cycles % 1'000'000 == 0) {
+    if (tb->is_trace) tb->trace->dump(tb->cycles);
+    printf("[INFO] cycles: %lu\n", tb->cycles);
+  }
 }
 
 void cycle(TestBench* tb) {
@@ -268,6 +270,10 @@ int main(int argc, char** argv, char** env) {
       else if (streq(mode, "cycles")) {
         config.is_cycles = true;
       }
+      // else if (streq(mode, "verbose")) {
+      //   // TODO: verbocity, stdout to a file
+      //   config.is_verbose = true;
+      // }
       else if (streq(mode, "max")) {
         if (config.max_cycles) {
           fprintf(stderr, "Error: second max cycles\n");

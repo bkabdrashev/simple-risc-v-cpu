@@ -50,9 +50,9 @@ Finished in 9646 ms
 Dhrystone PASS         2 Marks
                    vs. 100000 Marks (i7-7700K @ 4.20GHz)
 dut ebreak
-finished:119256805 ticks // base no mem read/write delays
-finished:238518347 ticks // ifu 1 cycle delay
-finished:329543570 ticks // ifu and slu 1 cycle delay
+finished: 119256805 ticks // base no mem read/write delays
+finished: 238518347 ticks // ifu 1 cycle delay
+finished: 329543570 ticks // ifu and slu 1 cycle delay
 finished:1069368356 ticks // >5 cycle delays
 
 Trying 15000 runs through Dhrystone.
@@ -69,4 +69,15 @@ Finished in 73737 ms
 Dhrystone PASS         0 Marks
                    vs. 100000 Marks (i7-7700K @ 4.20GHz)
 dut ebreak
-finished:1069368356
+finished:1'069'368'356 ticks
+
+SoC Performance
+Dhrystone Benchmark, Version C, Version 2.2
+Trying 500 runs through Dhrystone.
+Finished in 4767 ms // inconsistent time due to variable simulated clock
+==================================================
+Dhrystone PASS         0 Marks
+                   vs. 100000 Marks (i7-7700K @ 4.20GHz)
+[INFO] vcpu ebreak
+[INFO] finished:391'218'576 cycles
+rm new.bin

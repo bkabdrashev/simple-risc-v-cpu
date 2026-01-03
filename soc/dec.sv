@@ -67,11 +67,11 @@ module dec (
         inst_type = INST_JUMP;
       end
       OPCODE_SYSTEM: begin
-      // WRITE a = b << 0 
+      // WRITE a = b >> 0 
       // SET   a = b | c
       // CLEAR a = b & ~c
         imm       = i_imm;
-        alu_op    = {2'b00, funct3[1:0]};
+        alu_op    = {2'b01, funct3[1:0]};
         inst_type = {2'b10, funct3};
       end
       default: inst_type = 0;

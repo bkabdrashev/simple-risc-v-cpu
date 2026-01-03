@@ -9,7 +9,3 @@
 #define UART_START (0x10000000u)
 #define UART_END   (0x10000fffu)
 #define UART_SIZE  (UART_END - UART_START)
-
-#define TIME_START (0x10001000u)
-
-

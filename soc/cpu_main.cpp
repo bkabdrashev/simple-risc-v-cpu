@@ -209,12 +209,6 @@ void v_mem_write(TestBench* tb, uint8_t wen, uint8_t wbmask, uint32_t addr, uint
         tb->vuart[addr] = byte;
       }
     }
-    else if (addr == TIME_START) {
-      // printf("try read uart: %p, %u\n", address, result);
-      uint64_t time_us = get_time_us();
-      result = (time_us & 0xffffffff);
-      // printf("time low:%u\n", result);
-    }
     else if (addr >= MEM_START && addr < MEM_END-3) {
       addr &= ~3;
       addr -= MEM_START;
@@ -365,27 +359,6 @@ bool test_random(TestBench* tb) {
   bool is_tests_success = true;
   printf("[TODO] random tests are not implemented\n");
   return is_tests_success;
-}
-
-void simple_lw_sw_test(TestBench* tb) {
-  uint32_t insts[7] = {
-    lui(0x80000, REG_SP),     // 0
-    li(0x12, REG_T0),         // 4
-    sw( 0x4, REG_T0, REG_SP), // 8
-    li(0x34, REG_T1),         // C
-    sw( 0x5, REG_T1, REG_SP), // 10
-    lw( 0x4, REG_SP, REG_T2), // 14
-    ebreak()
-  };
-
-  tb->n_insts = 7;
-  tb->insts = (uint32_t*)malloc(sizeof(uint32_t) * tb->n_insts);
-  for (uint32_t i = 0; i < tb->n_insts; i++) {
-    tb->insts[i] = insts[i];
-  }
-
-  v_reset(tb);
-  run(tb);
 }
 
 static void usage(const char* prog) {

@@ -29,6 +29,7 @@ module cpu (
   logic [REG_END_WORD:0] imm;
 
   logic                  pc_wen;
+  logic                  is_pc_jump;
   logic [REG_END_WORD:0] pc_next;
   logic [REG_END_WORD:0] pc_inc;
 
@@ -36,6 +37,9 @@ module cpu (
   logic [REG_END_WORD:0] alu_lhs;
   logic [REG_END_WORD:0] alu_rhs;
   logic [3:0]            alu_op;
+
+  logic [2:0]            com_op;
+  logic                  com_res;
 
   logic [REG_END_WORD:0] reg_wdata;
   logic [REG_END_WORD:0] reg_rdata1;
@@ -81,6 +85,7 @@ module cpu (
 
     .is_mem_sign(is_mem_sign),
     .alu_op(alu_op),
+    .com_op(com_op),
     .imm(imm),
     .inst_type(inst_type));
 
@@ -89,6 +94,12 @@ module cpu (
     .lhs(alu_lhs),
     .rhs(alu_rhs),
     .res(alu_res));
+
+  com u_com(
+    .op(com_op),
+    .lhs(reg_rdata1),
+    .rhs(reg_rdata2),
+    .res(com_res));
 
   rf u_rf(
     .clock(clock),
@@ -138,6 +149,8 @@ module cpu (
       INST_CSRRWI: alu_lhs = {27'b0,  rs1};
       INST_CSRRSI: alu_lhs = {27'b0,  rs1};
       INST_CSRRCI: alu_lhs = {27'b1, ~rs1};
+      INST_JUMP:   alu_lhs = pc;
+      INST_BRANCH: alu_lhs = pc;
       default:     alu_lhs = reg_rdata1;
     endcase
 
@@ -149,7 +162,9 @@ module cpu (
       INST_STORE_BYTE: alu_rhs = imm;
       INST_STORE_HALF: alu_rhs = imm;
       INST_STORE_WORD: alu_rhs = imm;
-      INST_JUMP:       alu_rhs = imm;         
+      INST_JUMP:       alu_rhs = imm;
+      INST_JUMPR:      alu_rhs = imm;
+      INST_BRANCH:     alu_rhs = imm;
       INST_IMM:        alu_rhs = imm;        
       INST_UPP:        alu_rhs = 0;        
 
@@ -248,7 +263,8 @@ module cpu (
       INST_LOAD_HALF: reg_wdata = {mem_half_extend, lsu_rdata[REG_END_HALF:0]};
       INST_LOAD_WORD: reg_wdata = lsu_rdata;
       INST_UPP:       reg_wdata = imm;
-      INST_JUMP:      reg_wdata = pc_inc;         
+      INST_JUMP:      reg_wdata = pc_inc;
+      INST_JUMPR:     reg_wdata = pc_inc;
       INST_REG:       reg_wdata = alu_res;        
       INST_IMM:       reg_wdata = alu_res;        
 
@@ -262,8 +278,9 @@ module cpu (
       default:        reg_wdata = 0;
     endcase
 
+    is_pc_jump = inst_type == INST_JUMP || (inst_type == INST_BRANCH && com_res);
     if (pc_wen) begin
-       if (inst_type == INST_JUMP) pc_next = alu_res;
+       if (is_pc_jump) pc_next = alu_res;
        else pc_next = pc_inc;
     end
     else pc_next = pc;

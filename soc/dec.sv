@@ -8,6 +8,7 @@ module dec (
 
   output logic [REG_END_WORD:0]  imm,
   output logic [3:0]             alu_op,
+  output logic [2:0]             com_op,
   output logic                   is_mem_sign,
   output logic [INST_TYPE_END:0] inst_type);
 /* verilator lint_off UNUSEDPARAM */
@@ -20,9 +21,11 @@ module dec (
   logic [6:0] opcode;
   logic [2:0] funct3;
 
-  logic [REG_END_WORD:0] i_imm; 
-  logic [REG_END_WORD:0] u_imm; 
-  logic [REG_END_WORD:0] s_imm; 
+  logic [REG_END_WORD:0] i_imm;
+  logic [REG_END_WORD:0] u_imm;
+  logic [REG_END_WORD:0] s_imm;
+  logic [REG_END_WORD:0] j_imm;
+  logic [REG_END_WORD:0] b_imm;
 
   always_comb begin
     opcode = inst[6:0];
@@ -39,7 +42,11 @@ module dec (
     i_imm = { {20{sign}}, inst[31:20] };
     u_imm = { inst[31:12], 12'd0 };
     s_imm = { {20{sign}}, inst[31:25], inst[11:7] };
-    alu_op = 0;
+    j_imm = { {12{sign}}, inst[19:12], inst[20], inst[30:21], 1'b0};
+    b_imm = { {20{sign}}, inst[7], inst[30:25], inst[11:8], 1'b0 };
+
+    alu_op = ALU_OP_ADD;
+    com_op = COM_OP_EQ;
     case (opcode)
       OPCODE_CALC_IMM: begin
         imm = i_imm;
@@ -62,9 +69,18 @@ module dec (
         imm = u_imm;
         inst_type = INST_UPP;
       end
+      OPCODE_JAL: begin
+        imm = j_imm;
+        inst_type = INST_JUMP;
+      end
       OPCODE_JALR: begin
         imm = i_imm;
-        inst_type = INST_JUMP;
+        inst_type = INST_JUMPR;
+      end
+      OPCODE_BRANCH: begin
+        imm = b_imm;
+        com_op    = funct3;
+        inst_type = INST_BRANCH;
       end
       OPCODE_SYSTEM: begin
       // WRITE a = b >> 0 

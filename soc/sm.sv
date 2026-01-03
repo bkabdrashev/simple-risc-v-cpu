@@ -40,14 +40,14 @@ module sm (
 
   always_ff @(posedge clock or posedge reset) begin
     if (reset) begin
-      state <= STATE_START;
+      state    <= STATE_START;
       finished <= 0;
-      ebreak <= 0;
+      ebreak   <= 0;
     end
     else       begin
-      state <= next;
+      state    <= next;
       finished <= next_finished;
-      ebreak <= ebreak ? 1 : next_ebreak;
+      ebreak   <= ebreak ? 1 : next_ebreak;
     end
   end
 
@@ -75,7 +75,6 @@ module sm (
       end
       STATE_FETCH: begin
         if (ifu_respValid && ifu_inflight) begin
-          pc_wen = 1;
           case (inst_type)
             INST_LOAD_BYTE: begin next = STATE_LOAD;  lsu_reqValid = 1; end
             INST_LOAD_HALF: begin next = STATE_LOAD;  lsu_reqValid = 1; end 
@@ -83,7 +82,11 @@ module sm (
             INST_STORE_BYTE:begin next = STATE_STORE; lsu_reqValid = 1; lsu_wen = 1; end 
             INST_STORE_HALF:begin next = STATE_STORE; lsu_reqValid = 1; lsu_wen = 1; end 
             INST_STORE_WORD:begin next = STATE_STORE; lsu_reqValid = 1; lsu_wen = 1; end 
-            default:        begin next = STATE_EXEC; reg_wen = 1;       end
+            default:        begin
+              next = STATE_EXEC;
+              reg_wen = inst_type != INST_BRANCH;
+              pc_wen = 1;
+            end
           endcase
         end
         else begin
@@ -93,7 +96,8 @@ module sm (
       end
       STATE_LOAD: begin
         if (lsu_respValid && lsu_inflight) begin
-          next = STATE_EXEC; reg_wen = 1;
+          next = STATE_EXEC;
+          reg_wen = 1;
         end
         else begin
           next = STATE_LOAD;

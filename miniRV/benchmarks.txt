@@ -80,4 +80,12 @@ Dhrystone PASS         0 Marks
                    vs. 100000 Marks (i7-7700K @ 4.20GHz)
 [INFO] vcpu ebreak
 [INFO] finished:391'218'576 cycles
-rm new.bin
+
+// Added jal, branch instructions
+Trying 500 runs through Dhrystone.
+Finished in 4162 ms
+==================================================
+Dhrystone PASS         0 Marks
+                   vs. 100000 Marks (i7-7700K @ 4.20GHz)
+[INFO] vcpu ebreak
+[INFO] finished:376'203'974 cycles

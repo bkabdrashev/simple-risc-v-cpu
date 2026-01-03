@@ -79,9 +79,9 @@ module sm (
             INST_LOAD_BYTE: begin next = STATE_LOAD;  lsu_reqValid = 1; end
             INST_LOAD_HALF: begin next = STATE_LOAD;  lsu_reqValid = 1; end 
             INST_LOAD_WORD: begin next = STATE_LOAD;  lsu_reqValid = 1; end 
-            INST_STORE_BYTE:begin next = STATE_STORE; lsu_reqValid = 1; lsu_wen = 1; end 
-            INST_STORE_HALF:begin next = STATE_STORE; lsu_reqValid = 1; lsu_wen = 1; end 
-            INST_STORE_WORD:begin next = STATE_STORE; lsu_reqValid = 1; lsu_wen = 1; end 
+            INST_STORE_BYTE:begin next = STATE_STORE; lsu_reqValid = 1; lsu_wen = 1; pc_wen = 1; end 
+            INST_STORE_HALF:begin next = STATE_STORE; lsu_reqValid = 1; lsu_wen = 1; pc_wen = 1; end 
+            INST_STORE_WORD:begin next = STATE_STORE; lsu_reqValid = 1; lsu_wen = 1; pc_wen = 1; end 
             default:        begin
               next = STATE_EXEC;
               reg_wen = inst_type != INST_BRANCH;

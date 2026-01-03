@@ -59,11 +59,11 @@ module dec (
       end
       OPCODE_LOAD: begin
         imm = i_imm;
-        inst_type = {3'b010,funct3[1:0]};
+        inst_type = {3'b011,funct3[1:0]};
       end
       OPCODE_STORE: begin
         imm = s_imm;
-        inst_type = {3'b011,funct3[1:0]};
+        inst_type = {3'b010,funct3[1:0]};
       end
       OPCODE_LUI: begin
         imm = u_imm;

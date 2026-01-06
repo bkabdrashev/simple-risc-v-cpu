@@ -1,4 +1,4 @@
-#include "svdpi.h"
+#include <cstdint>
 #include "stdio.h"
 #include "assert.h"
 

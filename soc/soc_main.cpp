@@ -2,6 +2,8 @@
 #include <verilated_vcd_c.h>
 #include "VysyxSoCTop.h"
 #include "VysyxSoCTop___024root.h"
+#include "Vcpu.h"
+#include "Vcpu___024root.h"
 
 typedef VysyxSoCTop SoC;
 
@@ -129,7 +131,8 @@ struct TestBench {
   uint64_t ticks;
   uint64_t instrets;
 
-  Rcpu* rcpu;
+  SoCcpu* soc_cpu;
+  Vcpu* vcpu;
   Gcpu* gcpu;
 };
 
@@ -146,7 +149,7 @@ void print_all_instructions(TestBench* tb) {
   }
 }
 
-void tick(TestBench* tb) {
+void soc_tick(TestBench* tb) {
   tb->soc->eval();
   if (tb->is_trace) {
     tb->trace->dump(tb->trace_dumps++);
@@ -156,29 +159,38 @@ void tick(TestBench* tb) {
   tb->soc->clock ^= 1;
 }
 
-void cycle(TestBench* tb) {
-  tick(tb);
-  tick(tb);
+void soc_cycle(TestBench* tb) {
+  soc_tick(tb);
+  soc_tick(tb);
   tb->cycles++;
 }
 
-void v_reset(TestBench* tb) {
+void soc_reset(TestBench* tb) {
   printf("[INFO] reset\n");
   tb->soc->reset = 1;
   tb->soc->clock = 0;
   for (uint64_t i = 0; i < tb->reset_cycles; i++) {
-    cycle(tb);
+    soc_cycle(tb);
   }
   tb->soc->reset = 0;
 }
 
 
-void fetch_exec(TestBench* tb) {
+void soc_fetch_exec(TestBench* tb) {
   while (1) {
-    cycle(tb);
+    soc_cycle(tb);
     if (tb->max_cycles && tb->cycles >= tb->max_cycles) break;
-    if (tb->rcpu->ebreak) break;
-    if (tb->rcpu->is_done_instruction) break;
+    if (tb->soc_cpu->ebreak) break;
+    if (tb->soc_cpu->is_done_instruction) break;
+  }
+}
+
+void cpu_fetch_exec(TestBench* tb) {
+  while (1) {
+    cpu_cycle(tb);
+    if (tb->max_cycles && tb->cycles >= tb->max_cycles) break;
+    if (tb->soc_cpu->ebreak) break;
+    if (tb->soc_cpu->is_done_instruction) break;
   }
 }
 
@@ -200,21 +212,21 @@ bool compare_mem(uint64_t sim_time, uint32_t address, uint32_t r, uint32_t g) {
 
 bool compare(TestBench* tb) {
   bool result = true;
-  result &= compare_reg(tb->cycles, "EBREAK",   tb->rcpu->ebreak,   tb->gcpu->ebreak);
-  result &= compare_reg(tb->cycles, "PC",       tb->rcpu->pc,       tb->gcpu->pc);
-  result &= compare_reg(tb->cycles, "MCYCLE",   tb->rcpu->mcycle,   tb->cycles - tb->reset_cycles); // NOTE: cycles are offset by number of cycles during the reset, since reset period is doubled
-  result &= compare_reg(tb->cycles, "MINSTRET", tb->rcpu->minstret, tb->instrets);
+  result &= compare_reg(tb->cycles, "EBREAK",   tb->soc_cpu->ebreak,   tb->gcpu->ebreak);
+  result &= compare_reg(tb->cycles, "PC",       tb->soc_cpu->pc,       tb->gcpu->pc);
+  result &= compare_reg(tb->cycles, "MCYCLE",   tb->soc_cpu->mcycle,   tb->cycles - tb->reset_cycles); // NOTE: cycles are offset by number of cycles during the reset, since reset period is doubled
+  result &= compare_reg(tb->cycles, "MINSTRET", tb->soc_cpu->minstret, tb->instrets);
   for (uint32_t i = 0; i < N_REGS; i++) {
     char digit0 = i%10 + '0';
     char digit1 = i/10 + '0';
     char name[] = {'x', digit1, digit0, '\0'};
-    result &= compare_reg(tb->cycles, name, tb->rcpu->regs[i], tb->gcpu->regs[i]);
+    result &= compare_reg(tb->cycles, name, tb->soc_cpu->regs[i], tb->gcpu->regs[i]);
   }
   // result &= memcmp(tb->gcpu->flash, tb->vflash, FLASH_SIZE) == 0;
-  result &= memcmp(tb->gcpu->mem, &tb->rcpu->mem.m_storage[0], MEM_SIZE) == 0;
+  result &= memcmp(tb->gcpu->mem, &tb->soc_cpu->mem.m_storage[0], MEM_SIZE) == 0;
   if (!result) {
     for (uint32_t i = 0; i < MEM_SIZE; i++) {
-      uint32_t v = ((uint8_t*)tb->rcpu->mem.m_storage)[i];
+      uint32_t v = ((uint8_t*)tb->soc_cpu->mem.m_storage)[i];
       uint32_t g = tb->gcpu->mem[i];
       result &= compare_mem(tb->cycles, i, v, g);
     }
@@ -244,7 +256,7 @@ bool test_instructions(TestBench* tb) {
   while (1) {
     uint32_t pc = tb->gcpu->pc;
     uint32_t inst = g_mem_read(tb->gcpu, tb->gcpu->pc);
-    if (tb->is_diff) {
+    if (tb->is_gold) {
       uint8_t ebreak = cpu_eval(tb->gcpu);
       if (ebreak) {
         printf("[INFO] gcpu ebreak\n");
@@ -254,40 +266,49 @@ bool test_instructions(TestBench* tb) {
       }
     }
 
-    fetch_exec(tb);
-    if (tb->rcpu->ebreak) {
-      printf("[INFO] rcpu ebreak\n");
-      if (!tb->is_diff && tb->rcpu->regs[10] != 0) {
-        printf("[FAILED] test is not successful: rcpu returned %u\n", tb->rcpu->regs[10]);
-        is_test_success=false;
+    if (tb->is_soc) {
+      soc_fetch_exec(tb);
+      if (tb->soc_cpu->ebreak) {
+        printf("[INFO] soc ebreak\n");
+        if (!tb->is_diff && tb->soc_cpu->regs[10] != 0) {
+          printf("[FAILED] test is not successful: soc_cpu returned %u\n", tb->soc_cpu->regs[10]);
+          is_test_success=false;
+        }
       }
     }
 
-    if (tb->is_diff) {
+    if (tb->is_gold) {
       is_test_success &= compare(tb);
       if (!is_test_success) {
         printf("[%x] pc=0x%08x inst: [0x%x] ", tb->cycles, pc, inst);
         print_instruction(inst);
         break;
       }
-      if (tb->rcpu->ebreak && tb->gcpu->ebreak) break;
     }
-    else if (tb->rcpu->ebreak) {
-      break;
+
+    if (tb->is_vcpu) {
+      is_test_success &= compare(tb);
+      if (!is_test_success) {
+        printf("[%x] pc=0x%08x inst: [0x%x] ", tb->cycles, pc, inst);
+        print_instruction(inst);
+        break;
+      }
     }
 
     if (tb->max_cycles && tb->cycles >= tb->max_cycles) {
-      printf("[%x] pc=0x%08x inst: [0x%x] \n", tb->cycles, tb->rcpu->pc);
+      printf("[%x] pc=0x%08x inst: [0x%x] \n", tb->cycles, tb->soc_cpu->pc);
       printf("[FAILED] test is not successful: timeout %u/%u\n", tb->cycles, tb->max_cycles);
       is_test_success=false;
       break;
     }
-    if (tb->is_diff && !is_valid_pc_address(tb->gcpu->pc, tb->n_insts)) {
-      if (!is_valid_pc_address(tb->rcpu->pc, tb->n_insts)) {
-        break;
-      }
+
+    if (tb->is_gold && !is_valid_pc_address(tb->gcpu->pc, tb->n_insts)) {
+      break;
     }
-    if (!is_valid_pc_address(tb->rcpu->pc, tb->n_insts)) {
+    if (tb->is_soc && !is_valid_pc_address(tb->soc_cpu->pc, tb->n_insts)) {
+      break;
+    }
+    if (tb->is_vcpu && !is_valid_pc_address(tb->vcpu->pc, tb->n_insts)) {
       break;
     }
     if (tb->instrets > tb->n_insts) {
@@ -382,7 +403,7 @@ TestBench new_testbench(TestBenchConfig config) {
   }
 
   tb.soc = new SoC;
-  tb.rcpu = new Rcpu {
+  tb.soc_cpu = new SoCcpu{
     .ebreak              = tb.soc->rootp->ysyxSoCTop__DOT__dut__DOT__asic__DOT__cpu__DOT__u_cpu__DOT__ebreak,
     .pc                  = tb.soc->rootp->ysyxSoCTop__DOT__dut__DOT__asic__DOT__cpu__DOT__u_cpu__DOT__pc,
     .is_done_instruction = tb.soc->rootp->ysyxSoCTop__DOT__dut__DOT__asic__DOT__cpu__DOT__u_cpu__DOT__is_done_instruction,
@@ -408,10 +429,10 @@ TestBench new_testbench(TestBenchConfig config) {
     },
   };
 
-  // tb.vcpu = new Vcpu;
+  tb.vcpu = new Vcpu;
 
   tb.gcpu = new Gcpu;
-  tb.gcpu->vuart = &tb.rcpu->uart;
+  tb.gcpu->vuart = &tb.soc_cpu->uart;
 
   tb.contextp = new VerilatedContext;
 
@@ -419,6 +440,7 @@ TestBench new_testbench(TestBenchConfig config) {
     Verilated::traceEverOn(true);
     tb.trace = new VerilatedVcdC;
     tb.soc->trace(tb.trace, 5);
+    tb.vcpu->trace(tb.trace, 5);
     tb.trace->open(tb.trace_file);
   }
   return tb;
@@ -432,7 +454,7 @@ void delete_testbench(TestBench tb) {
     tb.trace->close();
     delete tb.trace;
   }
-  delete tb.rcpu;
+  delete tb.soc_cpu;
   delete tb.gcpu;
   delete tb.soc;
   delete tb.contextp;

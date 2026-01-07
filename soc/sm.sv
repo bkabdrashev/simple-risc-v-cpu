@@ -61,17 +61,13 @@ module sm (
     next_ebreak = 0;
     unique case (state)
       STATE_START: begin
-        // if (counter == 10) begin
-          if (reset) begin
-            next = STATE_START;
-          end
-          else begin
-            ifu_reqValid = 1;
-            next = STATE_FETCH;
-          end
-
-        // end
-        // else next = STATE_START;
+        if (reset) begin
+          next = STATE_START;
+        end
+        else begin
+          ifu_reqValid = 1;
+          next = STATE_FETCH;
+        end
       end
       STATE_FETCH: begin
         if (ifu_respValid && ifu_inflight) begin

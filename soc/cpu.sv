@@ -214,15 +214,15 @@ module cpu (
           2'b00: begin lsu_wmask = 4'b0011; lsu_wdata = {8'b0, 8'b0, half2}; end
           2'b01: begin lsu_wmask = 4'b0110; lsu_wdata = {8'b0, half2, 8'b0}; end
           2'b10: begin lsu_wmask = 4'b1100; lsu_wdata = {half2, 8'b0, 8'b0}; end
-          2'b11: begin lsu_wmask = 4'b0000; lsu_wdata = 32'b0; end // TODO: exceptional case
+          2'b11: begin lsu_wmask = 4'b1000; lsu_wdata = {half2 << 8, 8'b0, 8'b0}; end // TODO: exceptional case, do it in 2 cycles
         endcase
       end
       INST_STORE_WORD: begin
         case (alu_res[1:0])
-          2'b00: begin lsu_wmask = 4'b1111; lsu_wdata = reg_rdata2; end
-          2'b01: begin lsu_wmask = 4'b0000; lsu_wdata = 32'b0; end // TODO: exceptional case
-          2'b10: begin lsu_wmask = 4'b0000; lsu_wdata = 32'b0; end // TODO: exceptional case
-          2'b11: begin lsu_wmask = 4'b0000; lsu_wdata = 32'b0; end // TODO: exceptional case
+          2'b00: begin lsu_wmask = 4'b1111; lsu_wdata = reg_rdata2 <<  0; end
+          2'b01: begin lsu_wmask = 4'b1110; lsu_wdata = reg_rdata2 <<  8; end // TODO: exceptional case, do it in 2 cycles
+          2'b10: begin lsu_wmask = 4'b1100; lsu_wdata = reg_rdata2 << 16; end // TODO: exceptional case, do it in 2 cycles
+          2'b11: begin lsu_wmask = 4'b1000; lsu_wdata = reg_rdata2 << 24; end // TODO: exceptional case, do it in 2 cycles
         endcase
       end
       INST_LOAD_BYTE: begin

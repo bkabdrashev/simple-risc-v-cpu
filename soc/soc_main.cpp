@@ -46,7 +46,7 @@ struct TestBenchConfig {
   uint32_t inst_flags = false;
   bool is_memcmp      = false;
   bool is_check       = false;
-  uint32_t seed       = 0;
+  uint64_t seed       = 0;
   uint64_t max_tests  = 0;
   uint32_t n_insts    = 0;
 
@@ -67,7 +67,7 @@ struct TestBench {
   uint32_t inst_flags;
   bool is_memcmp;
   bool is_check;
-  uint32_t seed;
+  uint64_t seed;
   uint64_t max_tests;
 
 
@@ -407,15 +407,17 @@ void vcpu_tick(TestBench* tb) {
   // if (tb->is_trace) {
   //   tb->trace->dump(tb->trace_dumps++);
   // }
+
   tb->vcpu_ticks++;
+  tb->vcpu_cycles = tb->vcpu_ticks / 2;
+  if (tb->is_cycles && tb->vcpu_cycles % 1'000'000 == 0) printf("[INFO] vcpu cycles: %lu\n", tb->vcpu_cycles);
+
   tb->vcpu->clock ^= 1;
 }
 
 void vcpu_cycle(TestBench* tb) {
   vcpu_tick(tb);
   vcpu_tick(tb);
-  tb->vcpu_cycles++;
-  if (tb->is_cycles && tb->vcpu_cycles % 1'000'000 == 0) printf("[INFO] vcpu cycles: %lu\n", tb->vcpu_cycles);
 }
 
 void vcpu_reset(TestBench* tb) {
@@ -716,15 +718,17 @@ bool test_random(TestBench* tb) {
   }
   uint64_t i_test = 0;
   do {
+    uint32_t inst_count = 0;
     printf("======== SEED:%lu ===== %u/%u =========\n", seed, i_test, tb->max_tests);
-    std::random_device rd;
-    std::mt19937 gen(rd());
+    std::random_device rand_device;
+    std::mt19937 gen(rand_device());
     gen.seed(seed);
-    for (uint32_t i = 0; i < tb->n_insts; i++) {
-      uint32_t inst = random_instruction(&gen, tb->inst_flags);
-      // uint32_t inst = random_instruction_no_jump(&gen);
-      // uint32_t inst = random_instruction_no_mem_no_jump(&gen);
-      tb->insts[i] = inst;
+    for (uint32_t rd = 1; rd < N_REGS; rd++) {
+      tb->insts[inst_count++] = lui(0x80800, 15);
+      tb->insts[inst_count++] = addi(random_bits(&gen, 12), 15, rd);
+    }
+    for (uint32_t i = 0; i < tb->n_insts - 2*(N_REGS-1); i++) {
+      tb->insts[inst_count++] = random_instruction(&gen, tb->inst_flags);
     }
 
     // print_all_instructions(tb);
@@ -857,7 +861,8 @@ int main(int argc, char** argv, char** env) {
         }
         config.is_random = true;
         config.max_tests = std::stoull(argv[curr_arg++]);
-        config.n_insts   = std::stoi(argv[curr_arg++]);
+        // NOTE: 2*(N_REGS-1) is needed to accomodate random register updates at start 
+        config.n_insts   = std::stoi(argv[curr_arg++]) + 2*(N_REGS-1);
         config.inst_flags = 0;
         const char* flags = argv[curr_arg++];
         size_t len = strlen(flags);

@@ -334,7 +334,7 @@ InstInfo inst_info(uint32_t inst) {
   if (sign) out.i_imm = (~0u << 12) | take_bits_range(inst, 20, 31);
   else      out.i_imm = ( 0u << 12) | take_bits_range(inst, 20, 31);
 
-  out.u_imm = sar32(take_bits_range(inst, 12, 31), 12);
+  out.u_imm = take_bits_range(inst, 12, 31) << 12;
 
   if (sign) out.s_imm = (~0u << 12) | take_bits_range(inst, 25, 31) << 5 | take_bits_range(inst, 7, 11);
   else      out.s_imm = ( 0u << 12) | take_bits_range(inst, 25, 31) << 5 | take_bits_range(inst, 7, 11);
@@ -352,16 +352,16 @@ void print_instruction(uint32_t inst) {
   InstInfo info = inst_info(inst);
   switch (info.opcode) {
     case OPCODE_LUI: {
-      printf("lui   imm=%5i rd=%2u\n", info.u_imm, info.reg_dest);
+      printf("lui   imm=0x%x rd=%2u\n", info.u_imm, info.reg_dest);
     } break;
     case OPCODE_AUIPC: {
-      printf("auipc imm=%5i rd=%2u\n", info.u_imm, info.reg_dest);
+      printf("auipc imm=0x%x rd=%2u\n", info.u_imm, info.reg_dest);
     } break;
     case OPCODE_JAL: {
-      printf("jal   imm=%5i rd=%2u\n", info.j_imm, info.reg_src1, info.reg_dest);
+      printf("jal   imm=0x%x rd=%2u\n", info.j_imm, info.reg_src1, info.reg_dest);
     } break;
     case OPCODE_JALR: {
-      printf("jalr  imm=%5i rs1=%2u rd=%2u\n", info.i_imm, info.reg_src1, info.reg_dest);
+      printf("jalr  imm=0x%x rs1=%2u rd=%2u\n", info.i_imm, info.reg_src1, info.reg_dest);
     } break;
     case OPCODE_BRANCH: {
       switch (info.funct3) {
@@ -451,31 +451,31 @@ uint32_t random_bits(std::mt19937* gen, uint32_t n) {
 }
 
 uint32_t random_instruction(std::mt19937* gen, uint32_t flags) {
-  uint32_t opcodes[16] = {};
+  uint32_t opcodes[128] = {};
   uint32_t opcode_count = 0;
   if (flags & InstFlag_Store) {
-    opcodes[opcode_count++] = OPCODE_STORE;
+    for (uint32_t i = 0; i < 3; i++) opcodes[opcode_count++] = OPCODE_STORE;
   }
   if (flags & InstFlag_Load) {
-    opcodes[opcode_count++] = OPCODE_LOAD;
+    for (uint32_t i = 0; i < 5; i++) opcodes[opcode_count++] = OPCODE_LOAD;
   }
   if (flags & InstFlag_Calc) {
-    opcodes[opcode_count++] = OPCODE_LUI;
-    opcodes[opcode_count++] = OPCODE_AUIPC;
-    opcodes[opcode_count++] = OPCODE_CALC_IMM;
-    opcodes[opcode_count++] = OPCODE_CALC_REG;
+    for (uint32_t i = 0; i < 1; i++) opcodes[opcode_count++] = OPCODE_LUI;
+    for (uint32_t i = 0; i < 1; i++) opcodes[opcode_count++] = OPCODE_AUIPC;
+    for (uint32_t i = 0; i < 8; i++) opcodes[opcode_count++] = OPCODE_CALC_IMM;
+    for (uint32_t i = 0; i < 10; i++) opcodes[opcode_count++] = OPCODE_CALC_REG;
   }
   if (flags & InstFlag_Jump) {
-    opcodes[opcode_count++] = OPCODE_JAL;
-    opcodes[opcode_count++] = OPCODE_JALR;
+    for (uint32_t i = 0; i < 1; i++) opcodes[opcode_count++] = OPCODE_JAL;
+    for (uint32_t i = 0; i < 1; i++) opcodes[opcode_count++] = OPCODE_JALR;
   }
   if (flags & InstFlag_Branch) {
-    opcodes[opcode_count++] = OPCODE_BRANCH;
+    for (uint32_t i = 0; i < 6; i++) opcodes[opcode_count++] = OPCODE_BRANCH;
   }
   if (flags & InstFlag_System) {
-    opcodes[opcode_count++] = OPCODE_SYSTEM;
+    for (uint32_t i = 0; i < 1; i++) opcodes[opcode_count++] = OPCODE_SYSTEM;
   }
-  assert(opcode_count < 16);
+
   uint32_t opcode_id = random_range(gen, 0, opcode_count);
   uint32_t opcode = opcodes[opcode_id];
 
@@ -512,7 +512,7 @@ uint32_t random_instruction(std::mt19937* gen, uint32_t flags) {
     } break;
     case OPCODE_LOAD: {
       uint32_t imm = random_bits(gen, 12);
-      uint32_t rs1 = random_bits(gen, 4);
+      uint32_t rs1 = random_range(gen, 1, N_REGS);
       uint32_t rd  = random_bits(gen, 4);
       uint32_t load_types[5] = { FUNCT3_LB, FUNCT3_LH, FUNCT3_LW, FUNCT3_LBU, FUNCT3_LHU };
       uint32_t funct3 = load_types[random_range(gen, 0, 5)];
@@ -521,7 +521,7 @@ uint32_t random_instruction(std::mt19937* gen, uint32_t flags) {
     case OPCODE_STORE: {
       uint32_t imm = random_bits(gen, 12);
       uint32_t rs2 = random_bits(gen, 4);
-      uint32_t rs1 = random_bits(gen, 4);
+      uint32_t rs1 = random_range(gen, 1, N_REGS);
       uint32_t store_types[3] = { FUNCT3_SB, FUNCT3_SH, FUNCT3_SW };
       uint32_t funct3 = store_types[random_range(gen, 0, 3)];
       inst = s_type(imm, rs2, rs1, funct3, opcode);

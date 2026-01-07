@@ -44,6 +44,7 @@ struct TestBenchConfig {
   bool is_gold        = false;
   bool is_random      = false;
   bool is_memcmp      = false;
+  bool is_check       = false;
   uint32_t seed       = 0;
   uint64_t max_tests  = 0;
   uint32_t n_insts    = 0;
@@ -63,6 +64,7 @@ struct TestBench {
   bool is_gold;
   bool is_random;
   bool is_memcmp;
+  bool is_check;
   uint32_t seed;
   uint64_t max_tests;
 
@@ -374,8 +376,8 @@ bool compare_mem(uint64_t sim_time, uint32_t address, uint32_t r, uint32_t g) {
 
 bool compare_vsoc_gold(TestBench* tb) {
   bool result = true;
-  result &= compare_reg(tb->vsoc_cycles, "EBREAK",   tb->vsoc_cpu->ebreak,   tb->gcpu->ebreak);
-  result &= compare_reg(tb->vsoc_cycles, "PC",       tb->vsoc_cpu->pc,       tb->gcpu->pc);
+  result &= compare_reg(tb->vsoc_cycles, "vsoc.ebreak",   tb->vsoc_cpu->ebreak,   tb->gcpu->ebreak);
+  result &= compare_reg(tb->vsoc_cycles, "vsoc.pc    ",   tb->vsoc_cpu->pc,       tb->gcpu->pc);
   for (uint32_t i = 0; i < N_REGS; i++) {
     char digit0 = i%10 + '0';
     char digit1 = i/10 + '0';
@@ -397,8 +399,8 @@ bool compare_vsoc_gold(TestBench* tb) {
 
 bool compare_vcpu_gold(TestBench* tb) {
   bool result = true;
-  result &= compare_reg(tb->vcpu_cycles, "EBREAK",   tb->vcpu_cpu->ebreak,   tb->gcpu->ebreak);
-  result &= compare_reg(tb->vcpu_cycles, "PC",       tb->vcpu_cpu->pc,       tb->gcpu->pc);
+  result &= compare_reg(tb->vcpu_cycles, "vcpu.ebreak",   tb->vcpu_cpu->ebreak,   tb->gcpu->ebreak);
+  result &= compare_reg(tb->vcpu_cycles, "vcpu.pc    ",   tb->vcpu_cpu->pc,       tb->gcpu->pc);
   for (uint32_t i = 0; i < N_REGS; i++) {
     char digit0 = i%10 + '0';
     char digit1 = i/10 + '0';
@@ -420,9 +422,8 @@ bool compare_vcpu_gold(TestBench* tb) {
 
 bool compare_vcpu_vsoc(TestBench* tb) {
   bool result = true;
-  result &= compare_reg(tb->vsoc_cycles, "EBREAK",   tb->vcpu_cpu->ebreak,   tb->vsoc_cpu->ebreak);
-  result &= compare_reg(tb->vsoc_cycles, "PC",       tb->vcpu_cpu->pc,       tb->vsoc_cpu->pc);
-  result &= compare_reg(tb->vsoc_cycles, "MINSTRET", tb->vcpu_cpu->minstret, tb->vsoc_cpu->minstret);
+  result &= compare_reg(tb->vsoc_cycles, "ebreak",   tb->vcpu_cpu->ebreak,   tb->vsoc_cpu->ebreak);
+  result &= compare_reg(tb->vsoc_cycles, "pc    ",   tb->vcpu_cpu->pc,       tb->vsoc_cpu->pc);
   for (uint32_t i = 0; i < N_REGS; i++) {
     char digit0 = i%10 + '0';
     char digit1 = i/10 + '0';
@@ -480,6 +481,10 @@ bool test_instructions(TestBench* tb) {
       uint8_t ebreak = cpu_eval(tb->gcpu);
       if (ebreak) {
         printf("[INFO] gcpu ebreak\n");
+        if (tb->is_check && tb->gcpu->regs[10] != 0) {
+          printf("[FAILED] test is not successful: gcpu returned %u\n", tb->gcpu->regs[10]);
+          is_test_success=false;
+        }
       }
       if (tb->gcpu->is_not_mapped) {
         break;
@@ -490,27 +495,27 @@ bool test_instructions(TestBench* tb) {
       vsoc_fetch_exec(tb);
       if (tb->vsoc_cpu->ebreak) {
         printf("[INFO] vsoc ebreak\n");
-        if (tb->vsoc_cpu->regs[10] != 0) {
+        if (tb->is_check && tb->vsoc_cpu->regs[10] != 0) {
           printf("[FAILED] test is not successful: vsoc returned %u\n", tb->vsoc_cpu->regs[10]);
           is_test_success=false;
         }
       }
       // NOTE: cycles are offset by number of cycles during the reset, since reset period is doubled for vsoc
-      is_test_success &= compare_reg(tb->vsoc_cycles, "MCYCLE",   tb->vsoc_cpu->mcycle,   tb->vsoc_cycles - tb->reset_cycles);
-      is_test_success &= compare_reg(tb->vsoc_cycles, "MINSTRET", tb->vsoc_cpu->minstret, tb->instrets);
+      is_test_success &= compare_reg(tb->vsoc_cycles, "vsoc.mcycle",   tb->vsoc_cpu->mcycle,   tb->vsoc_cycles - tb->reset_cycles);
+      is_test_success &= compare_reg(tb->vsoc_cycles, "vsoc.minstret", tb->vsoc_cpu->minstret, tb->instrets);
     }
 
     if (tb->is_vcpu) {
       vcpu_fetch_exec(tb);
       if (tb->vcpu_cpu->ebreak) {
         printf("[INFO] vcpu ebreak\n");
-        if (tb->vcpu_cpu->regs[10] != 0) {
+        if (tb->is_check && tb->vcpu_cpu->regs[10] != 0) {
           printf("[FAILED] test is not successful: vcpu returned %u\n", tb->vcpu_cpu->regs[10]);
           is_test_success=false;
         }
       }
-      is_test_success &= compare_reg(tb->vcpu_cycles, "MCYCLE",   tb->vcpu_cpu->mcycle,   tb->vcpu_cycles);
-      is_test_success &= compare_reg(tb->vcpu_cycles, "MINSTRET", tb->vcpu_cpu->minstret, tb->instrets);
+      is_test_success &= compare_reg(tb->vcpu_cycles, "vcpu.mcycle",   tb->vcpu_cpu->mcycle,   tb->vcpu_cycles);
+      is_test_success &= compare_reg(tb->vcpu_cycles, "vcpu.minstret", tb->vcpu_cpu->minstret, tb->instrets);
     }
 
     if (tb->is_gold && tb->is_vsoc) {
@@ -551,6 +556,12 @@ bool test_instructions(TestBench* tb) {
       printf("[%x] pc=0x%08x inst: [0x%x] \n", tb->vcpu_cycles, tb->vcpu_cpu->pc);
       printf("[FAILED] test is not successful: vsoc timeout %u/%u\n", tb->vcpu_cycles, tb->max_cycles);
       is_test_success=false;
+      break;
+    }
+
+    if ((!tb->is_vsoc || tb->vsoc_cpu->ebreak) &&
+        (!tb->is_vcpu || tb->vcpu_cpu->ebreak) &&
+        (!tb->is_gold || tb->gcpu->ebreak)) {
       break;
     }
 
@@ -600,7 +611,7 @@ bool test_random(TestBench* tb) {
     seed = 13612659699927657461lu;
   }
   else {
-    hash_uint64_t(std::time(0));
+    seed = hash_uint64_t(std::time(0));
   }
   uint64_t i_test = 0;
   do {
@@ -609,10 +620,9 @@ bool test_random(TestBench* tb) {
     std::mt19937 gen(rd());
     gen.seed(seed);
     for (uint32_t i = 0; i < tb->n_insts; i++) {
-      // uint32_t inst = random_instruction_mem_load_or_store(&gen);
-      // uint32_t inst = random_instruction(&gen);
+      uint32_t inst = random_instruction(&gen);
       // uint32_t inst = random_instruction_no_jump(&gen);
-      uint32_t inst = random_instruction_no_mem_no_jump(&gen);
+      // uint32_t inst = random_instruction_no_mem_no_jump(&gen);
       tb->insts[i] = inst;
     }
 
@@ -635,12 +645,13 @@ bool test_random(TestBench* tb) {
 static void usage(const char* prog) {
   fprintf(stderr,
     "Usage:\n"
-    "  %s vsoc|vcpu|gold [trace <path>] [cycles] [memcmp] [timeout <cycles>] [seed <number>] bin    <path>\n"
-    "  %s vsoc|vcpu|gold [trace <path>] [cycles] [memcmp] [timeout <cycles>] [seed <number>] random <tests> <n_insts>\n"
+    "  %s vsoc|vcpu|gold [trace <path>] [cycles] [memcmp] [check] [timeout <cycles>] [seed <number>] bin    <path>\n"
+    "  %s vsoc|vcpu|gold [trace <path>] [cycles] [memcmp] [check] [timeout <cycles>] [seed <number>] random <tests> <n_insts>\n"
     "    vsoc|vcpu|gold     : select at least one to run: vsoc -- verilated SoC, vcpu -- verilated CPU, gold -- Golden Model\n"
     "    [trace <path>]     : saves the trace of the run at <path> (only for vcpu and vsoc)\n"
     "    [cycles]           : shows every 1'000'000 cycles\n"
     "    [memcmp]           : compare full memory\n"
+    "    [check]            : on ebreak check a0 == 0, otherwise test failed\n"
     "    [timeout <cycles>] : timeout after <cycles> cycles\n"
     "    [seed <number>]    : set initial seed to <number>\n"
     "    random <tests> <n_insts> : <tests> times random tests with <n_insts> instructions; conflicts with bin \n"
@@ -668,6 +679,7 @@ TestBench new_testbench(TestBenchConfig config) {
 
     .is_random  = config.is_random,
     .is_memcmp  = config.is_memcmp,
+    .is_check   = config.is_check,
     .seed       = config.seed,
     .max_tests  = config.max_tests,
     .n_insts    = config.n_insts,
@@ -775,6 +787,9 @@ int main(int argc, char** argv, char** env) {
       }
       else if (streq(mode, "memcmp")) {
         config.is_memcmp = true;
+      }
+      else if (streq(mode, "check")) {
+        config.is_check = true;
       }
       else if (streq(mode, "trace")) {
         if (config.is_trace) {

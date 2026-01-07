@@ -99,7 +99,7 @@ void g_flash_init(Gcpu* cpu, uint8_t* data, uint32_t size) {
   for (uint32_t i = 0; i < size; i++) {
     cpu->flash[i] = data[i];
   }
-  printf("[INFO] g flash written: %u bytes\n", size);
+  printf("[INFO] gold flash written: %u bytes\n", size);
 }
 
 void g_mem_write(Gcpu* cpu, uint8_t wen, uint8_t wbmask, uint32_t addr, uint32_t wdata) {

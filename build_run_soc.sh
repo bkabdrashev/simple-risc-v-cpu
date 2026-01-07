@@ -29,7 +29,7 @@ g++ -std=c++17 \
   -Iobj_cpu -Iobj_soc \
   -I$VERILATOR_ROOT/include \
   -I"$VERILATOR_ROOT/include/vltstd" \
-  soc/soc_main.cpp soc/c_dpi.cpp \
+  soc/soc_main.cpp\
   obj_soc/libVysyxSoCTop.a obj_cpu/libVcpu.a \
   obj_soc/libverilated.a \
   -o bin/testbench

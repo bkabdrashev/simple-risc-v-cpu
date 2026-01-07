@@ -1,6 +1,5 @@
 #include <cstdint>
 #include <assert.h>
-#include "c_dpi.h"
 #include "mem_map.h"
 
 #define ALU_OP_ADD  (0b0000)
@@ -44,7 +43,7 @@
 #define INST_JUMPR      (0b01111)
 #define INST_AUIPC      (0b11111)
 
-struct SoCuart {
+struct VSoCuart {
   uint8_t&  ier;
   uint8_t&  iir;
   uint8_t&  fcr;
@@ -61,7 +60,7 @@ struct SoCuart {
   uint8_t&  lsr7;
 };
 
-struct SoCcpu {
+struct VSoCcpu {
   uint8_t&  ebreak;
   uint32_t& pc;
   uint8_t&  is_done_instruction;
@@ -69,7 +68,7 @@ struct SoCcpu {
   uint64_t& minstret;
   VlUnpacked<uint32_t, 16>&  regs;
   VlUnpacked<uint16_t, 16777216>& mem;
-  SoCuart uart;
+  VSoCuart uart;
 };
 
 struct Gcpu {
@@ -82,7 +81,7 @@ struct Gcpu {
   uint8_t ebreak;
   bool    is_not_mapped;
 
-  SoCuart*  soc_uart;
+  VSoCuart*  vsoc_uart;
 };
 
 void g_reset(Gcpu* cpu) {
@@ -135,21 +134,21 @@ uint32_t g_mem_read(Gcpu* cpu, uint32_t addr) {
     addr -= UART_START;
     uint8_t byte = 0;
     switch (addr) {
-      case 1 : byte = cpu->soc_uart->ier; break;
-      case 2 : byte = cpu->soc_uart->iir; break;
-      case 3 : byte = cpu->soc_uart->lcr; break;
+      case 1 : byte = cpu->vsoc_uart->ier; break;
+      case 2 : byte = cpu->vsoc_uart->iir; break;
+      case 3 : byte = cpu->vsoc_uart->lcr; break;
       case 5 : {
         byte =
-          (cpu->soc_uart->lsr0 << 0) |
-          (cpu->soc_uart->lsr1 << 1) |
-          (cpu->soc_uart->lsr2 << 2) |
-          (cpu->soc_uart->lsr3 << 3) |
-          (cpu->soc_uart->lsr4 << 4) |
-          (cpu->soc_uart->lsr5 << 5) |
-          (cpu->soc_uart->lsr6 << 6) |
-          (cpu->soc_uart->lsr7 << 7) ;
+          (cpu->vsoc_uart->lsr0 << 0) |
+          (cpu->vsoc_uart->lsr1 << 1) |
+          (cpu->vsoc_uart->lsr2 << 2) |
+          (cpu->vsoc_uart->lsr3 << 3) |
+          (cpu->vsoc_uart->lsr4 << 4) |
+          (cpu->vsoc_uart->lsr5 << 5) |
+          (cpu->vsoc_uart->lsr6 << 6) |
+          (cpu->vsoc_uart->lsr7 << 7) ;
       } break;
-      case 6 : byte = cpu->soc_uart->msr; break;
+      case 6 : byte = cpu->vsoc_uart->msr; break;
     }
     result = 
       byte << 24 | byte << 16 |

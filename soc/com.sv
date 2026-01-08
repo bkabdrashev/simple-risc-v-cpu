@@ -1,9 +1,8 @@
 module com (
-  input  logic [2:0]            op,
+  input  logic [COM_OP_END:0]   op,
   input  logic [REG_END_WORD:0] lhs,
   input  logic [REG_END_WORD:0] rhs,
-  output logic                  res
-);
+  output logic                  res);
 /* verilator lint_off UNUSEDPARAM */
   `include "defs.vh"
 /* verilator lint_on UNUSEDPARAM */
@@ -16,7 +15,8 @@ module com (
       COM_OP_GE: res = $signed(lhs) >= $signed(rhs);
       COM_OP_LTU:res = lhs <  rhs;
       COM_OP_GEU:res = lhs >= rhs;
-      default:   res = 1'b0; // not implemented
+      COM_OP_ONE:res = 1'b1;
+      default:   res = 1'b0;
     endcase
   end
 

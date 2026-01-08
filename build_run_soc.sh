@@ -2,6 +2,7 @@
 export VERILATOR_ROOT=/usr/share/verilator
 
 verilator --trace -cc \
+  -Wall \
   -Isoc \
   soc/cpu.sv \
   soc/rf.sv soc/sm.sv soc/pc.sv soc/dec.sv soc/alu.sv soc/csr.sv soc/com.sv soc/defs.vh \

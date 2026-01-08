@@ -1,52 +1,36 @@
 module dec (
-  input logic [REG_END_WORD:0] inst,
-  input logic clock,
+  input logic [REG_END_WORD:0]   inst,
+  input logic                    clock,
 
-  output logic [REG_END_ID:0] rd,
-  output logic [REG_END_ID:0] rs1,
-  output logic [REG_END_ID:0] rs2,
+  output logic [REG_END_ID:0]    rd,
+  output logic [REG_END_ID:0]    rs1,
+  output logic [REG_END_ID:0]    rs2,
 
   output logic [REG_END_WORD:0]  imm,
-  output logic [3:0]             alu_op,
-  output logic [2:0]             com_op,
-  output logic                   is_mem_sign,
+  output logic [ALU_OP_END:0]    alu_op,
+  output logic [COM_OP_END:0]    com_op,
   output logic [INST_TYPE_END:0] inst_type);
 /* verilator lint_off UNUSEDPARAM */
   `include "defs.vh"
 /* verilator lint_on UNUSEDPARAM */
 
-  logic sign; 
-  logic sub;
-
-  logic [6:0] opcode;
-  logic [2:0] funct3;
-
-  logic [REG_END_WORD:0] i_imm;
-  logic [REG_END_WORD:0] u_imm;
-  logic [REG_END_WORD:0] s_imm;
-  logic [REG_END_WORD:0] j_imm;
-  logic [REG_END_WORD:0] b_imm;
+  assign opcode = inst[6:0];
+  assign rd     = inst[11:7];
+  assign funct3 = inst[14:12];
+  assign rs1    = inst[19:15];
+  assign rs2    = inst[24:20];
+  assign sign   = inst[31];
+  assign sub    = inst[30];
+  assign i_imm  = { {20{sign}}, inst[31:20] };
+  assign u_imm  = { inst[31:12], 12'd0 };
+  assign s_imm  = { {20{sign}}, inst[31:25], inst[11:7] };
+  assign j_imm  = { {12{sign}}, inst[19:12], inst[20], inst[30:21], 1'b0 };
+  assign b_imm  = { {20{sign}}, inst[7], inst[30:25], inst[11:8], 1'b0  };
 
   always_comb begin
-    opcode = inst[6:0];
-    rd     = inst[11:7];
-    funct3 = inst[14:12];
-    rs1    = inst[19:15];
-    rs2    = inst[24:20];
-
-    sign = inst[31];
-    sub = inst[30];
-
     imm = 0;
-
-    i_imm = { {20{sign}}, inst[31:20] };
-    u_imm = { inst[31:12], 12'd0 };
-    s_imm = { {20{sign}}, inst[31:25], inst[11:7] };
-    j_imm = { {12{sign}}, inst[19:12], inst[20], inst[30:21], 1'b0};
-    b_imm = { {20{sign}}, inst[7], inst[30:25], inst[11:8], 1'b0 };
-
     alu_op = ALU_OP_ADD;
-    com_op = COM_OP_EQ;
+    com_op = COM_OP_ONE;
     case (opcode)
       OPCODE_CALC_IMM: begin
         imm = i_imm;
@@ -59,14 +43,15 @@ module dec (
       end
       OPCODE_LOAD: begin
         imm = i_imm;
-        inst_type = {3'b011,funct3[1:0]};
+        inst_type = {INST_LOAD,funct3};
       end
       OPCODE_STORE: begin
         imm = s_imm;
-        inst_type = {3'b010,funct3[1:0]};
+        inst_type = {INST_STORE,funct3};
       end
       OPCODE_LUI: begin
         imm = u_imm;
+        alu_op = ALU_OP_RHS;
         inst_type = INST_UPP;
       end
       OPCODE_AUIPC: begin
@@ -87,18 +72,15 @@ module dec (
         inst_type = INST_BRANCH;
       end
       OPCODE_SYSTEM: begin
-      // WRITE a = b >> 0 
+      // WRITE a = b
       // SET   a = b | c
       // CLEAR a = b & ~c
         imm       = i_imm;
-        alu_op    = {2'b01, funct3[1:0]};
-        inst_type = {2'b10, funct3};
+        alu_op    = {funct3[0],funct3[1],2'b10};
+        inst_type = {INST_SYSTEM, funct3[2], 1'b0, |funct3[1:0]};
       end
       default: inst_type = 0;
     endcase
-
-    is_mem_sign = !funct3[2];
-
   end
 
 endmodule

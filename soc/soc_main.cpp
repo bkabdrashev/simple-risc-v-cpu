@@ -30,7 +30,8 @@ struct Vcpucpu {
   uint8_t flash[FLASH_SIZE];
   uint8_t uart[UART_SIZE];
 
-  uint8_t holdValid;
+  uint8_t io_ifu_reqValid;
+  uint8_t io_lsu_reqValid;
 };
 
 struct TestBenchConfig {
@@ -441,15 +442,24 @@ BreakCode vcpu_subtick(TestBench* tb) {
   if (tb->vcpu_cpu->is_instret)                            break_code = InstRet;
 
   if (tb->vcpu->io_ifu_reqValid) {
+    tb->vcpu_cpu->io_ifu_reqValid = 1;
+  }
+  if (tb->vcpu->io_lsu_reqValid) {
+    tb->vcpu_cpu->io_lsu_reqValid = 1;
+  }
+
+  if (break_code != NoBreak) return break_code;
+
+  if (tb->vcpu_cpu->io_ifu_reqValid) {
+    tb->vcpu_cpu->io_ifu_reqValid = 0;
     vcpu_wait_ticks(tb, 4);
     tb->vcpu->io_ifu_respValid = 1;
-    tb->vcpu_cpu->holdValid = 1;
     tb->vcpu->io_ifu_rdata = v_mem_read(tb, tb->vcpu->io_ifu_addr);
   }
-  else if (tb->vcpu->io_lsu_reqValid) {
+  else if (tb->vcpu_cpu->io_lsu_reqValid) {
+    tb->vcpu_cpu->io_lsu_reqValid = 0;
     vcpu_wait_ticks(tb, 4);
     tb->vcpu->io_lsu_respValid = 1;
-    tb->vcpu_cpu->holdValid = 1;
     v_mem_write(tb, tb->vcpu->io_lsu_wen, tb->vcpu->io_lsu_wmask, tb->vcpu->io_lsu_addr, tb->vcpu->io_lsu_wdata);
     tb->vcpu->io_lsu_rdata = v_mem_read(tb, tb->vcpu->io_lsu_addr);
   }
@@ -474,21 +484,17 @@ void vcpu_reset(TestBench* tb) {
 }
 
 BreakCode vcpu_fetch_exec(TestBench* tb) {
-  printf("==============fetch start ================\n");
+  printf("==============fetch start %u ================\n", tb->vcpu_cycles);
   BreakCode break_code = NoBreak;
-  while (1) {
+  while (break_code == NoBreak) {
     vcpu_tick(tb);
     tb->vcpu->io_ifu_respValid = 0;
     tb->vcpu->io_lsu_respValid = 0;
-    break_code = vcpu_subtick(tb);
-    vcpu_tick(tb);
     vcpu_subtick(tb);
-
-    if (break_code != NoBreak) {
-      printf("==============fetch end ================\n");
-      break;
-    }
+    vcpu_tick(tb);
+    break_code = vcpu_subtick(tb);
   }
+  printf("==============fetch end   %u ================\n", tb->vcpu_cycles);
   return break_code;
 }
 

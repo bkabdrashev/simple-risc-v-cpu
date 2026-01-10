@@ -126,7 +126,7 @@ start ------->|IFU|------->|IDU| -------> |LSU|
     .reset     (reset),
     .wen       (csr_wen),
     .addr      (idu_imm[11:0]),
-    .is_instret(is_inst_retired),
+    .is_instret(exu_respValid),
     .is_ebreak (ebreak),
     .wdata     (csr_wdata),
     .rdata     (csr_rdata));

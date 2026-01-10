@@ -16,10 +16,12 @@ module cpu (
   output [31:0] io_lsu_wdata,
   output [3:0]  io_lsu_wmask);
 
+/* verilator lint_off UNUSEDPARAM */
 `include "com_defines.vh"
 `include "reg_defines.vh"
 `include "alu_defines.vh"
 `include "inst_defines.vh"
+/* verilator lint_on UNUSEDPARAM */
               
 /*
               +---+        +---+          +---+

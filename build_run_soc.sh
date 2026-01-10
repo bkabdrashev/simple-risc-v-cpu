@@ -2,6 +2,8 @@
 export VERILATOR_ROOT=/usr/share/verilator
 RTL_ROOT=/home/bekzat/chip_bootcamp/
 
+# OPT_FAST="-O0 -g3 -fno-omit-frame-pointer" \
+# OPT_SLOW="-O0 -g3 -fno-omit-frame-pointer" \
 DBG_CFLAGS="-g3 -O0 -fno-omit-frame-pointer"
 DBG_LDFLAGS="-g"
 
@@ -11,7 +13,6 @@ verilator --trace -cc \
   -I$RTL_ROOT/soc \
   soc/cpu.sv \
   soc/rf.sv soc/pc.sv soc/exu.sv soc/idu.sv soc/alu.sv soc/csr.sv soc/com.sv \
-  soc/reg_defines.vh soc/com_defines.vh soc/alu_defines.vh soc/inst_defines.vh \
   --timescale "1ns/1ns" \
   --no-timing \
   --Mdir obj_cpu \
@@ -42,5 +43,6 @@ g++ -std=c++17 -g \
   libverilated.a \
   -o bin/testbench \
 && \
-cd -
+cd - \
+&& \
 $RTL_ROOT/bin/testbench "$@"

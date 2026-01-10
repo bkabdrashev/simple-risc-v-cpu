@@ -4,8 +4,10 @@ module alu (
   input  logic [REG_W_END:0]  rhs,
   output logic [REG_W_END:0]  res);
 
+/* verilator lint_off UNUSEDPARAM */
 `include "reg_defines.vh"
 `include "alu_defines.vh"
+/* verilator lint_on UNUSEDPARAM */
 
   logic [4:0] shamt;
 

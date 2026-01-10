@@ -4,8 +4,10 @@ module com (
   input  logic [REG_W_END:0]  rhs,
   output logic                res);
 
+/* verilator lint_off UNUSEDPARAM */
 `include "reg_defines.vh"
 `include "com_defines.vh"
+/* verilator lint_on UNUSEDPARAM */
 
   always_comb begin
     case (op)

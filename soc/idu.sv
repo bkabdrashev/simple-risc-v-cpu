@@ -10,10 +10,12 @@ module idu (
   output logic [COM_OP_END:0]    com_op,
   output logic [INST_TYPE_END:0] inst_type);
 
+/* verilator lint_off UNUSEDPARAM */
   `include "com_defines.vh"
   `include "reg_defines.vh"
   `include "alu_defines.vh"
   `include "inst_defines.vh"
+/* verilator lint_on UNUSEDPARAM */
 
   localparam FUNCT3_SR        = 3'b101;
   localparam FUNCT3_ADD       = 3'b000;

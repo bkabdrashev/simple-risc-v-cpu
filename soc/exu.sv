@@ -23,10 +23,12 @@ module exu (
   input  logic [REG_W_END:0]     imm,
   input  logic [INST_TYPE_END:0] inst_type);
 
+/* verilator lint_off UNUSEDPARAM */
 `include "com_defines.vh"
 `include "reg_defines.vh"
 `include "alu_defines.vh"
 `include "inst_defines.vh"
+/* verilator lint_on UNUSEDPARAM */
 
 // NOTE: this is true, since all instructions done in EXU are 1 cycle, so 0 cycle stall
   assign respValid = reqValid;

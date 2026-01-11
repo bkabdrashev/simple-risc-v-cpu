@@ -54,9 +54,9 @@ module exu (
   end
 
   assign lsu_or_exec = is_lsu_inst && ~lsu_respValid ? EXU_STALL_LSU : EXU_EXECUTE;
+  assign respValid   = next_state == EXU_EXECUTE;
 
   always_comb begin
-    respValid    = 1'b0;
     next_state = curr_state;
     unique case (curr_state)
       EXU_RESET: begin
@@ -66,13 +66,11 @@ module exu (
         next_state = EXU_STALL_IDU;
         if (reqValid) begin
           next_state = lsu_or_exec;
-          respValid  = ~is_lsu_inst;
         end
       end
       EXU_STALL_IDU: begin
         if (reqValid) begin
           next_state = lsu_or_exec;
-          respValid  = ~is_lsu_inst;
         end
         else begin
           next_state = EXU_STALL_IDU;
@@ -90,7 +88,6 @@ module exu (
         next_state = EXU_STALL_IDU;
         if (reqValid) begin
           next_state = lsu_or_exec;
-          respValid  = ~is_lsu_inst;
         end
       end
     endcase

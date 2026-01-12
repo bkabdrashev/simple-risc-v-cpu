@@ -9,7 +9,7 @@
             "request": "launch",
             "name": "Debug",
             "program": "${workspaceFolder}/bin/testbench",
-            "args": ["random", "2", "1", "SL", "gold", "vcpu", "seed", "16231619963294694465", "delay", "2", "3"],
+            "args": ["random", "1", "1", "JBSLC", "gold", "vcpu", "seed", "4556774346050300374", "delay", "1", "5", "verbose", "10"],
             "cwd": "${workspaceFolder}"
         }
     ]

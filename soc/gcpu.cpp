@@ -43,13 +43,22 @@
 #define INST_JUMPR      (0b01111)
 #define INST_AUIPC      (0b11111)
 
-struct VSoCuart {
+enum VerboseLevel {
+  VerboseNone,
+  VerboseError,
+  VerboseFailed,
+  VerboseWarning,
+  VerboseInfo,
+};
+
+struct Vuart {
   uint8_t&  ier;
   uint8_t&  iir;
   uint8_t&  fcr;
   uint8_t&  mcr;
   uint8_t&  msr;
   uint8_t&  lcr;
+  uint8_t&  lsr;
   uint8_t&  lsr0;
   uint8_t&  lsr1;
   uint8_t&  lsr2;
@@ -58,6 +67,8 @@ struct VSoCuart {
   uint8_t&  lsr5;
   uint8_t&  lsr6;
   uint8_t&  lsr7;
+
+  bool      lsr_packed;
 };
 
 struct VSoCcpu {
@@ -68,20 +79,20 @@ struct VSoCcpu {
   uint64_t& minstret;
   VlUnpacked<uint32_t, 16>&  regs;
   VlUnpacked<uint16_t, 16777216>& mem;
-  VSoCuart uart;
+  Vuart uart;
 };
 
 struct Gcpu {
   uint32_t pc = INITIAL_PC;
   uint32_t regs[N_REGS];
 
-  uint8_t mem[MEM_SIZE];
-  uint8_t flash[FLASH_SIZE];
+  uint8_t mem[MEM_SIZE+4];
+  uint8_t flash[FLASH_SIZE+4];
 
   uint8_t ebreak;
   bool    is_not_mapped;
-
-  VSoCuart*  vsoc_uart;
+  VerboseLevel verbose = VerboseFailed;
+  Vuart*  vuart;
 };
 
 void g_reset(Gcpu* cpu) {
@@ -107,7 +118,11 @@ void g_mem_write(Gcpu* cpu, uint8_t wen, uint8_t wbmask, uint32_t addr, uint32_t
   if (wen) {
     if (addr >= FLASH_START && addr < FLASH_END-3) {
       cpu->is_not_mapped = true;
-      printf("[WARNING]: gcpu tried to write to flash memory 0x%x\n", addr);
+      if (cpu->verbose >= VerboseWarning) {
+        printf("[WARNING]: gcpu tried to write to flash memory 0x%x\n", addr);
+      }
+    }
+    else if (addr >= UART_START && addr < UART_END) {
     }
     else if (addr >= MEM_START && addr < MEM_END-3) {
       addr -= MEM_START;
@@ -118,7 +133,9 @@ void g_mem_write(Gcpu* cpu, uint8_t wen, uint8_t wbmask, uint32_t addr, uint32_t
     }
     else {
       cpu->is_not_mapped = true;
-      printf("[WARNING]: gcpu mem write memory is not mapped 0x%x\n", addr);
+      if (cpu->verbose >= VerboseWarning) {
+        printf("[WARNING]: gcpu mem write memory is not mapped 0x%x\n", addr);
+      }
     }
   }
 }
@@ -128,7 +145,9 @@ uint32_t g_mem_read(Gcpu* cpu, uint32_t addr) {
   if (addr >= FLASH_START && addr < FLASH_END-3) {
     if (addr & 3) {
       cpu->is_not_mapped = true;
-      printf("[WARNING]: gcpu misaligned flash read 0x%x\n", addr);
+      if (cpu->verbose >= VerboseWarning) {
+        printf("[WARNING]: gcpu misaligned flash read 0x%x\n", addr);
+      }
     }
 
     addr -= FLASH_START;
@@ -136,28 +155,31 @@ uint32_t g_mem_read(Gcpu* cpu, uint32_t addr) {
       cpu->flash[addr+3] << 24 | cpu->flash[addr+2] << 16 |
       cpu->flash[addr+1] <<  8 | cpu->flash[addr+0] <<  0 ;
   }
-  else if (addr >= UART_START && addr < UART_END-3) {
+  else if (addr >= UART_START && addr < UART_END) {
     addr -= UART_START;
     uint8_t byte = 0;
     switch (addr) {
-      case 1 : byte = cpu->vsoc_uart->ier; break;
-      case 2 : byte = cpu->vsoc_uart->iir; break;
-      case 3 : byte = cpu->vsoc_uart->lcr; break;
+      case 1 : byte = cpu->vuart->ier; break;
+      case 2 : byte = cpu->vuart->iir; break;
+      case 3 : byte = cpu->vuart->lcr; break;
       case 5 : {
-        byte =
-          (cpu->vsoc_uart->lsr0 << 0) |
-          (cpu->vsoc_uart->lsr1 << 1) |
-          (cpu->vsoc_uart->lsr2 << 2) |
-          (cpu->vsoc_uart->lsr3 << 3) |
-          (cpu->vsoc_uart->lsr4 << 4) |
-          (cpu->vsoc_uart->lsr5 << 5) |
-          (cpu->vsoc_uart->lsr6 << 6) |
-          (cpu->vsoc_uart->lsr7 << 7) ;
+        if (cpu->vuart->lsr_packed) byte = cpu->vuart->lsr;
+        else byte =
+          (cpu->vuart->lsr0 << 0) |
+          (cpu->vuart->lsr1 << 1) |
+          (cpu->vuart->lsr2 << 2) |
+          (cpu->vuart->lsr3 << 3) |
+          (cpu->vuart->lsr4 << 4) |
+          (cpu->vuart->lsr5 << 5) |
+          (cpu->vuart->lsr6 << 6) |
+          (cpu->vuart->lsr7 << 7) ;
       } break;
-      case 6 : byte = cpu->vsoc_uart->msr; break;
+      case 6 : byte = cpu->vuart->msr; break;
       default:
         cpu->is_not_mapped = true;
-        printf("[WARNING]: gcpu uart chunk is not implemented 0x%x\n", addr);
+        if (cpu->verbose >= VerboseWarning) {
+          printf("[WARNING]: gcpu uart register is not implemented 0x%x\n", addr);
+        }
         break;
     }
     result = 
@@ -172,7 +194,9 @@ uint32_t g_mem_read(Gcpu* cpu, uint32_t addr) {
   }
   else {
     cpu->is_not_mapped = true;
-    printf("[WARNING]: gcpu mem read  memory is not mapped 0x%x\n", addr);
+    if (cpu->verbose >= VerboseWarning) {
+      printf("[WARNING]: gcpu mem read  memory is not mapped 0x%x\n", addr);
+    }
   }
   return result;
 }

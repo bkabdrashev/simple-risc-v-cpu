@@ -24,13 +24,13 @@ struct Vcpucpu {
   uint8_t & is_instret;
   uint64_t& mcycle;
   uint64_t& minstret;
-  uint64_t  minstret_start;
   VlUnpacked<uint32_t, 16>&  regs;
 
   uint8_t mem[MEM_SIZE];
   uint8_t flash[FLASH_SIZE];
   uint8_t uart[UART_SIZE];
 
+  uint64_t  minstret_start;
   uint8_t  io_ifu_reqValid;
   uint32_t io_ifu_addr;
 
@@ -66,6 +66,7 @@ struct TestBenchConfig {
   uint32_t n_insts    = 0;
   uint64_t mem_delay_min = 0;
   uint64_t mem_delay_max = 0;
+  VerboseLevel verbose = VerboseFailed;
 };
 
 struct TestBench {
@@ -93,8 +94,9 @@ struct TestBench {
 
   size_t    flash_size;
   uint32_t  n_insts;
-  uint64_t  mem_delay_min;;
-  uint64_t  mem_delay_max;;
+  uint64_t  mem_delay_min;
+  uint64_t  mem_delay_max;
+  VerboseLevel verbose;
   uint32_t* insts;
 
   uint64_t trace_dumps;
@@ -134,7 +136,8 @@ TestBench new_testbench(TestBenchConfig config) {
     .n_insts    = config.n_insts,
     .mem_delay_min = config.mem_delay_min,
     .mem_delay_max = config.mem_delay_max,
-    .trace_dumps = 0,
+    .verbose       = config.verbose,
+    .trace_dumps  = 0,
     .reset_cycles = 10,
   };
   if (tb.is_trace) {
@@ -157,6 +160,7 @@ TestBench new_testbench(TestBenchConfig config) {
       .mcr = tb.vsoc->rootp->ysyxSoCTop__DOT__dut__DOT__asic__DOT__luart__DOT__muart__DOT__Uregs__DOT__mcr,
       .msr = tb.vsoc->rootp->ysyxSoCTop__DOT__dut__DOT__asic__DOT__luart__DOT__muart__DOT__Uregs__DOT__msr,
       .lcr = tb.vsoc->rootp->ysyxSoCTop__DOT__dut__DOT__asic__DOT__luart__DOT__muart__DOT__Uregs__DOT__lcr,
+      .lsr  = tb.vsoc->rootp->ysyxSoCTop__DOT__dut__DOT__asic__DOT__luart__DOT__muart__DOT__Uregs__DOT__lsr0r,
       .lsr0 = tb.vsoc->rootp->ysyxSoCTop__DOT__dut__DOT__asic__DOT__luart__DOT__muart__DOT__Uregs__DOT__lsr0r,
       .lsr1 = tb.vsoc->rootp->ysyxSoCTop__DOT__dut__DOT__asic__DOT__luart__DOT__muart__DOT__Uregs__DOT__lsr1r,
       .lsr2 = tb.vsoc->rootp->ysyxSoCTop__DOT__dut__DOT__asic__DOT__luart__DOT__muart__DOT__Uregs__DOT__lsr2r,
@@ -165,6 +169,7 @@ TestBench new_testbench(TestBenchConfig config) {
       .lsr5 = tb.vsoc->rootp->ysyxSoCTop__DOT__dut__DOT__asic__DOT__luart__DOT__muart__DOT__Uregs__DOT__lsr5r,
       .lsr6 = tb.vsoc->rootp->ysyxSoCTop__DOT__dut__DOT__asic__DOT__luart__DOT__muart__DOT__Uregs__DOT__lsr6r,
       .lsr7 = tb.vsoc->rootp->ysyxSoCTop__DOT__dut__DOT__asic__DOT__luart__DOT__muart__DOT__Uregs__DOT__lsr7r,
+      .lsr_packed = false,
     },
   };
 
@@ -178,8 +183,30 @@ TestBench new_testbench(TestBenchConfig config) {
     .regs        = tb.vcpu->rootp->cpu__DOT__u_rf__DOT__regs,
   };
 
-  tb.gcpu = new Gcpu;
-  tb.gcpu->vsoc_uart = &tb.vsoc_cpu->uart;
+  tb.gcpu = new Gcpu{.verbose = tb.verbose};
+  if (tb.is_vsoc) {
+    tb.gcpu->vuart = &tb.vsoc_cpu->uart;
+  }
+  else if (tb.is_vcpu) {
+    tb.gcpu->vuart = new Vuart {
+      .ier = tb.vcpu_cpu->uart[1],
+      .iir = tb.vcpu_cpu->uart[2],
+      .fcr = tb.vcpu_cpu->uart[2],
+      .mcr = tb.vcpu_cpu->uart[4],
+      .msr = tb.vcpu_cpu->uart[6],
+      .lcr = tb.vcpu_cpu->uart[3],
+      .lsr = tb.vcpu_cpu->uart[5],
+      .lsr0= tb.vcpu_cpu->uart[5],
+      .lsr1= tb.vcpu_cpu->uart[5],
+      .lsr2= tb.vcpu_cpu->uart[5],
+      .lsr3= tb.vcpu_cpu->uart[5],
+      .lsr4= tb.vcpu_cpu->uart[5],
+      .lsr5= tb.vcpu_cpu->uart[5],
+      .lsr6= tb.vcpu_cpu->uart[5],
+      .lsr7= tb.vcpu_cpu->uart[5],
+      .lsr_packed = true,
+    };
+  }
 
   tb.contextp = new VerilatedContext;
 
@@ -193,7 +220,7 @@ TestBench new_testbench(TestBenchConfig config) {
     if (tb.is_vsoc) {
       tb.vsoc->trace(tb.trace, 5);
     }
-    if (tb.is_vcpu) {
+    else if (tb.is_vcpu) {
       tb.vcpu->trace(tb.trace, 5);
     }
     tb.trace->open(tb.trace_file);
@@ -597,7 +624,7 @@ bool compare_vsoc_gold(TestBench* tb) {
     for (uint32_t i = 0; i < MEM_SIZE; i++) {
       uint32_t v = ((uint8_t*)tb->vsoc_cpu->mem.m_storage)[i];
       uint32_t g = tb->gcpu->mem[i];
-      result &= compare_mem(tb->vsoc_cycles, i, v, g);
+      result &= compare_mem(tb->vsoc_cycles, i + MEM_START, v, g);
     }
   }
   return result;
@@ -620,7 +647,7 @@ bool compare_vcpu_gold(TestBench* tb) {
     for (uint32_t i = 0; i < MEM_SIZE; i++) {
       uint32_t v = tb->vcpu_cpu->mem[i];
       uint32_t g = tb->gcpu->mem[i];
-      result &= compare_mem(tb->vcpu_cycles, i, v, g);
+      result &= compare_mem(tb->vcpu_cycles, i + MEM_START, v, g);
     }
   }
   return result;
@@ -643,7 +670,7 @@ bool compare_vcpu_vsoc(TestBench* tb) {
     for (uint32_t i = 0; i < MEM_SIZE; i++) {
       uint32_t v = tb->vcpu_cpu->mem[i];
       uint32_t g = tb->gcpu->mem[i];
-      result &= compare_mem(tb->vsoc_cycles, i, v, g);
+      result &= compare_mem(tb->vsoc_cycles, i + MEM_START, v, g);
     }
   }
   return result;
@@ -693,7 +720,7 @@ bool test_instructions(TestBench* tb) {
         }
       }
       if (tb->gcpu->is_not_mapped) {
-        break;
+        // break;
       }
     }
     tb->instrets++;
@@ -776,12 +803,15 @@ bool test_instructions(TestBench* tb) {
       break;
     }
     if (tb->is_gold && !is_valid_pc_address(tb->gcpu->pc, tb->n_insts)) {
+      printf("[WARNING] gcpu not valid address: 0x%x\n", tb->gcpu->pc);
       break;
     }
     if (tb->is_vsoc && !is_valid_pc_address(tb->vsoc_cpu->pc, tb->n_insts)) {
+      printf("[WARNING] vsoc not valid address: 0x%x\n", tb->vsoc_cpu->pc);
       break;
     }
     if (tb->is_vcpu && !is_valid_pc_address(tb->vcpu_cpu->pc, tb->n_insts)) {
+      printf("[WARNING] vcpu not valid address: 0x%x\n", tb->vcpu_cpu->pc);
       break;
     }
     if (tb->is_random && tb->instrets > tb->n_insts) {
@@ -842,8 +872,9 @@ bool test_random(TestBench* tb) {
       uint32_t start = mem_start_choice[mem_rand];
       uint32_t size  = mem_size_choice[mem_rand];
       uint32_t base  = start + (size >> 12) / 2;
+      uint32_t offset = random_range(tb->random_gen, size/2, size);
       tb->insts[inst_count++] = lui(base, rd);
-      tb->insts[inst_count++] = addi(random_bits(tb->random_gen, 12) % size + size / 2, rd, rd);
+      tb->insts[inst_count++] = addi(offset, rd, rd);
     }
     for (uint32_t i = 0; i < tb->n_insts - 2*(N_REGS-1); i++) {
       tb->insts[inst_count++] = random_instruction(tb->random_gen, tb->inst_flags);
@@ -868,12 +899,13 @@ bool test_random(TestBench* tb) {
 static void usage(const char* prog) {
   fprintf(stderr,
     "Usage:\n"
-    "  %s vsoc|vcpu|gold [trace <path>] [cycles] [memcmp] [delay <cycles> <cycles>] [check] [timeout <cycles>] [seed <number>] bin    <path>\n"
-    "  %s vsoc|vcpu|gold [trace <path>] [cycles] [memcmp] [delay <cycles> <cycles>] [check] [timeout <cycles>] [seed <number>] random <tests> <n_insts> <JBLSCE | all>\n"
+    "  %s vsoc|vcpu|gold [trace <path>] [cycles] [memcmp] [verbose] [delay <cycles> <cycles>] [check] [timeout <cycles>] [seed <number>] bin|random\n"
     "    vsoc|vcpu|gold     : select at least one to run: vsoc -- verilated SoC, vcpu -- verilated CPU, gold -- Golden Model\n"
     "    [trace <path>]     : saves the trace of the run at <path> (only for vcpu and vsoc)\n"
     "    [cycles]           : shows every 1'000'000 cycles\n"
     "    [memcmp]           : compare full memory\n"
+    "    [verbose]          : verbosity level\n"
+    "      0 -- None, 1 -- Error, 2 -- Failed (default), 3 -- Warning, 4 -- Info\n"
     "    [delay <cycles> <cycles>]   : vcpu random delay in [<cycles>, <cycles>) for memory read/write\n"
     "    [check]            : on ebreak check a0 == 0, otherwise test failed\n"
     "    [timeout <cycles>] : timeout after <cycles> cycles\n"
@@ -980,6 +1012,15 @@ int main(int argc, char** argv, char** env) {
           goto exit_label;
         }
         config.seed = std::stoull(argv[curr_arg++]);
+      }
+      else if (streq(mode, "verbose")) {
+        if (curr_arg >= argc) {
+          fprintf(stderr, "[ERROR]: 'verbose' requires a <number>\n");
+          usage(argv[0]);
+          exit_code = EXIT_FAILURE;
+          goto exit_label;
+        }
+        config.verbose = (VerboseLevel)std::stoul(argv[curr_arg++]);
       }
       else if (streq(mode, "random")) {
         if (config.is_random) {

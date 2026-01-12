@@ -709,20 +709,6 @@ bool test_instructions(TestBench* tb) {
       pc   = tb->vcpu_cpu->pc;
       inst = v_mem_read(tb, tb->vcpu_cpu->pc);
     }
-
-    if (tb->is_gold) {
-      uint8_t ebreak = cpu_eval(tb->gcpu);
-      if (ebreak) {
-        printf("[INFO] gcpu ebreak\n");
-        if (tb->is_check && tb->gcpu->regs[10] != 0) {
-          printf("[FAILED] test is not successful: gcpu returned %u\n", tb->gcpu->regs[10]);
-          is_test_success=false;
-        }
-      }
-      if (tb->gcpu->is_not_mapped) {
-        // break;
-      }
-    }
     tb->instrets++;
 
     if (tb->is_vsoc) {
@@ -750,6 +736,20 @@ bool test_instructions(TestBench* tb) {
       }
       is_test_success &= compare_reg(tb->vcpu_ticks, "vcpu.mcycle",   tb->vcpu_cpu->mcycle,   tb->vcpu_cycles);
       is_test_success &= compare_reg(tb->vcpu_ticks, "vcpu.minstret", tb->vcpu_cpu->minstret, tb->instrets);
+    }
+
+    if (tb->is_gold) {
+      uint8_t ebreak = cpu_eval(tb->gcpu);
+      if (ebreak) {
+        printf("[INFO] gcpu ebreak\n");
+        if (tb->is_check && tb->gcpu->regs[10] != 0) {
+          printf("[FAILED] test is not successful: gcpu returned %u\n", tb->gcpu->regs[10]);
+          is_test_success=false;
+        }
+      }
+      if (tb->gcpu->is_not_mapped && tb->is_random) {
+        break;
+      }
     }
 
     if (tb->is_gold && tb->is_vsoc) {
@@ -1087,6 +1087,7 @@ int main(int argc, char** argv, char** env) {
 
     if (tb.is_bin && tb.is_random) {
       printf("[WARNING] bin test and random test together are not supported: doing only bin test\n");
+      tb.is_random = 0;
     }
 
     if (!tb.is_gold && !tb.is_vcpu && !tb.is_vsoc) {

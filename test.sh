@@ -22,9 +22,9 @@ case "$CPU" in
 esac
 
 cd $CPU_TESTS
-make ARCH=minirv-npc run cpu="$CPU"
+make ARCH=minirv-npc run cpu="$CPU" verbose=4
 cd - >/dev/null
 
 cd $RISCV_TESTS
-make ARCH=minirv-npc run cpu="$CPU"
+make ARCH=minirv-npc run cpu="$CPU" verbose=4
 cd - >/dev/null

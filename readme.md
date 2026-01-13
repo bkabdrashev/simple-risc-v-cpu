@@ -1,6 +1,7 @@
 # RISC-V 32 CPU design
 
-To run the verilated SoC use this script:
+## Build/Run
+To run the verilated SoC/CPU:
 ```txt
 ./build_run.sh
 
@@ -20,5 +21,26 @@ Usage:
     random <tests> <n_insts> <JBLSCE | all>: <tests> times random tests with <n_insts> <JBLSCE | all> instructions; conflicts with bin
       J -- jumps, B -- branches, L -- loads, S -- store, C -- calc, E -- system
     bin <path>               : loads the bin file to flash and runs it; conflicts with random
+```
+
+## Test
+This does ./am-kernels/tests/cpu-tests/* and ./riscv-tests-am/*.
+```txt
+./test.sh
+```
+
+Testing
+
+## Benchmarks
+
+## Simple Architecture
+```
++---+        +---+          +---+
+|IFU|------->|IDU| -------> |LSU|
++---+<---+   +---+          +---+
+         |      |             |
+       +---+    |             |
+       |EXU|<---+             |
+       +---+<-----------------+
 ```
 

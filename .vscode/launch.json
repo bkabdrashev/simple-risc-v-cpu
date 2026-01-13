@@ -9,7 +9,7 @@
             "request": "launch",
             "name": "Debug",
             "program": "${workspaceFolder}/bin/testbench",
-            "args": ["random", "1", "100", "JBSLCE", "gold", "vcpu", "seed", "2737283097678335375", "delay", "1", "5", "verbose", "10"],
+            "args": ["random", "1", "100", "JBSLC", "gold", "vsoc", "seed", "2737283097678335375", "delay", "1", "5", "verbose", "4"],
             // "args": ["bin", "bin/hello-minirv-ysyxsoc.bin", "vsoc", "gold"],
             "cwd": "${workspaceFolder}"
         }

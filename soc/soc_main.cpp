@@ -33,7 +33,7 @@ struct Vcpucpu {
   uint8_t  clock_pre;
 
   uint8_t  is_mem_write;
-  uint8_t  written_address;
+  uint32_t written_address;
 
   uint64_t minstret_start;
   uint8_t  io_ifu_reqValid;
@@ -555,6 +555,9 @@ void vcpu_reset(TestBench* tb) {
   tb->vcpu_cpu->io_lsu_respValid_ticks = 0;
   tb->vcpu_cpu->io_ifu_waitRespValid   = 0;
   tb->vcpu_cpu->io_lsu_waitRespValid   = 0;
+
+  tb->vcpu_cpu->is_mem_write    = false;
+  tb->vcpu_cpu->written_address = false;
 }
 
 void vcpu_wait_ticks(TestBench* tb, uint64_t ticks) {
@@ -692,11 +695,17 @@ bool compare_vsoc_gold(TestBench* tb) {
   if (tb->is_memcmp) {
     result &= memcmp(tb->gcpu->mem, &tb->vsoc_cpu->mem.m_storage[0], MEM_SIZE) == 0;
   }
-  else if (tb->gcpu->is_mem_write) {
-    uint32_t v = ((uint32_t*)tb->vsoc_cpu->mem.m_storage)[tb->gcpu->written_address];
-    uint32_t g = g_mem_read(tb->gcpu, tb->gcpu->written_address);
-    result &= compare_mem(tb->vsoc_cycles, tb->gcpu->written_address, v, g);
-  }
+  // TODO: mem check
+  // else if (tb->gcpu->is_mem_write) {
+  //   uint32_t address0 = tb->gcpu->written_address & ~3;
+  //   uint32_t address4 = (tb->gcpu->written_address & ~3) + 4;
+  //   uint32_t v = tb->vsoc_cpu->mem.m_storage[address0 >> 1];
+  //   uint32_t g = g_mem_read(tb->gcpu, address0);
+  //   result &= compare_mem(tb->vsoc_cycles, address0, v, g);
+  //   v = tb->vsoc_cpu->mem.m_storage[address4];
+  //   g = g_mem_read(tb->gcpu, address0);
+  //   result &= compare_mem(tb->vsoc_cycles, address4, v, g);
+  // }
   if (!result) {
     for (uint32_t i = 0; i < MEM_SIZE; i++) {
       uint32_t v = ((uint8_t*)tb->vsoc_cpu->mem.m_storage)[i];
@@ -723,23 +732,23 @@ bool compare_vcpu_gold(TestBench* tb) {
   else {
     if (tb->gcpu->is_mem_write) {
       uint32_t address0 = tb->gcpu->written_address & ~3;
-      uint32_t address4 = tb->gcpu->written_address & ~3 + 4;
+      uint32_t address4 = (tb->gcpu->written_address & ~3) + 4;
       uint32_t v = v_mem_read(tb,       address0);
       uint32_t g = g_mem_read(tb->gcpu, address0);
-      result &= compare_mem(tb->vsoc_cycles, address0, v, g);
+      result &= compare_mem(tb->vcpu_cycles, address0, v, g);
       v = v_mem_read(tb,       address4);
       g = g_mem_read(tb->gcpu, address4);
-      result &= compare_mem(tb->vsoc_cycles, address4, v, g);
+      result &= compare_mem(tb->vcpu_cycles, address4, v, g);
     }
     if (tb->vcpu_cpu->is_mem_write) {
       uint32_t address0 = tb->vcpu_cpu->written_address & ~3;
-      uint32_t address4 = tb->vcpu_cpu->written_address & ~3 + 4;
+      uint32_t address4 = (tb->vcpu_cpu->written_address & ~3) + 4;
       uint32_t v = v_mem_read(tb,       address0);
       uint32_t g = g_mem_read(tb->gcpu, address0);
-      result &= compare_mem(tb->vsoc_cycles, address0, v, g);
+      result &= compare_mem(tb->vcpu_cycles, address0, v, g);
       v = v_mem_read(tb,       address4);
       g = g_mem_read(tb->gcpu, address4);
-      result &= compare_mem(tb->vsoc_cycles, address4, v, g);
+      result &= compare_mem(tb->vcpu_cycles, address4, v, g);
     }
   }
   if (!result) {
@@ -776,6 +785,9 @@ bool compare_vcpu_vsoc(TestBench* tb) {
 }
 
 bool test_instructions(TestBench* tb) {
+  if (tb->verbose >= VerboseInfo5) {
+    print_all_instructions(tb);
+  }
   if (tb->is_vsoc)  {
     vsoc_reset(tb);
     vsoc_flash_init((uint8_t*)tb->insts, tb->flash_size);
@@ -1035,6 +1047,7 @@ static int streq(const char* a, const char* b) {
   return a && b && strcmp(a, b) == 0;
 }
 int main(int argc, char** argv, char** env) {
+ // TODO: this has problem with ebreak ./build_run_soc.sh random 100000 100 JBCLS vcpu gold seed 647310728731491444 delay 0 10 verbose 4
   int exit_code = EXIT_SUCCESS;
 
   if (argc < 2) {

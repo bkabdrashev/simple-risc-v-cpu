@@ -1,7 +1,7 @@
 # RISC-V 32 CPU design
 
 ## Build/Run
-To run the verilated SoC/CPU:
+To build and run the verilated SoC/CPU:
 ```txt
 ./build_run.sh
 
@@ -23,9 +23,9 @@ Usage:
     bin <path>               : loads the bin file to flash and runs it; conflicts with random
 ```
 
-## Test
+## Tests
 
-This does ./am-kernels/tests/cpu-tests/* and ./riscv-tests-am/* tests:
+To run ./am-kernels/tests/cpu-tests/* and ./riscv-tests-am/* tests:
 
 ```txt
 ./test.sh
@@ -37,7 +37,7 @@ Usage:
 
 ## Benchmarks
 
-This does ./am-kernels/benchmarks/microbench:
+To run ./am-kernels/benchmarks/microbench:
 
 ```txt
 ./bench.sh
@@ -48,7 +48,7 @@ Usage:
 ```
 
 
-## Simple Architecture
+## Architecture
 
 ```
 +---+        +---+          +---+

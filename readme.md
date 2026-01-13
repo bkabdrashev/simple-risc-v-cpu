@@ -1,4 +1,4 @@
-# RiscV 32 CPU design
+# RISC-V 32 CPU design
 
 To run the verilated SoC use this script:
 ```txt

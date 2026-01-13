@@ -24,16 +24,32 @@ Usage:
 ```
 
 ## Test
-This does ./am-kernels/tests/cpu-tests/* and ./riscv-tests-am/*.
+
+This does ./am-kernels/tests/cpu-tests/* and ./riscv-tests-am/* tests:
+
 ```txt
 ./test.sh
-```
 
-Testing
+Usage:
+  ./test.sh vsoc
+  ./test.sh vcpu
+```
 
 ## Benchmarks
 
+This does ./am-kernels/benchmarks/microbench:
+
+```txt
+./bench.sh
+
+Usage:
+  ./bench.sh vsoc
+  ./bench.sh vcpu
+```
+
+
 ## Simple Architecture
+
 ```
 +---+        +---+          +---+
 |IFU|------->|IDU| -------> |LSU|

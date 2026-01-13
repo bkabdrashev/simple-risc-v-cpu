@@ -2,7 +2,7 @@ CPU_TESTS=/home/bekzat/chip_bootcamp/am-kernels/tests/cpu-tests
 RISCV_TESTS=/home/bekzat/chip_bootcamp/riscv-tests-am
 
 usage() {
-  echo "Usge:"
+  echo "Usage:"
   echo "  $0 vsoc"
   echo "  $0 vcpu"
 }

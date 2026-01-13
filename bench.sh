@@ -1,7 +1,7 @@
 MICROBENCH_PATH=/home/bekzat/chip_bootcamp/am-kernels/benchmarks/microbench
 
 usage() {
-  echo "Usge:"
+  echo "Usage:"
   echo "  $0 vsoc"
   echo "  $0 vcpu"
 }

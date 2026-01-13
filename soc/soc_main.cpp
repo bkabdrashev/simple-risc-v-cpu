@@ -29,7 +29,13 @@ struct Vcpucpu {
   uint8_t flash[FLASH_SIZE];
   uint8_t uart[UART_SIZE];
 
-  uint64_t  minstret_start;
+  uint8_t  clock_now;
+  uint8_t  clock_pre;
+
+  uint8_t  is_mem_write;
+  uint8_t  written_address;
+
+  uint64_t minstret_start;
   uint8_t  io_ifu_reqValid;
   uint32_t io_ifu_addr;
 
@@ -178,6 +184,8 @@ TestBench new_testbench(TestBenchConfig config) {
     .mcycle      = tb.vcpu->rootp->cpu__DOT__u_csr__DOT__mcycle,
     .minstret    = tb.vcpu->rootp->cpu__DOT__u_csr__DOT__minstret,
     .regs        = tb.vcpu->rootp->cpu__DOT__u_rf__DOT__regs,
+    .is_mem_write    = false,
+    .written_address = 0,
   };
 
   tb.gcpu = new Gcpu{.verbose = tb.verbose};
@@ -338,13 +346,17 @@ void vsoc_flash_init(uint8_t* data, uint32_t size) {
   for (uint32_t i = 0; i < size; i++) {
     vsoc_flash[i] = data[i];
   }
-  printf("[INFO] vsoc flash written: %u bytes\n", size);
 }
 
 void vsoc_tick(TestBench* tb) {
   tb->vsoc->eval();
   if (tb->is_trace) {
-    tb->trace->dump(tb->trace_dumps++);
+    if (tb->trace_dumps > 100'000'000) {
+      printf("[WARNING] vsoc too much trace dumps: %llu \n", tb->trace_dumps);
+    }
+    else {
+      tb->trace->dump(tb->trace_dumps++);
+    }
   }
   tb->vsoc_ticks++;
   tb->vsoc->clock ^= 1;
@@ -353,7 +365,15 @@ void vsoc_tick(TestBench* tb) {
 void vsoc_cycle(TestBench* tb) {
   vsoc_tick(tb);
   vsoc_tick(tb);
-  if (tb->is_cycles && tb->vsoc_cycles % 1'000'000 == 0) printf("[INFO] vsoc cycles: %lu\n", tb->vsoc_cycles);
+  if (tb->verbose >= VerboseInfo6 && tb->vsoc_cycles % 1'000'000 == 0) {
+    printf("[INFO] vsoc cycles: %lu\n", tb->vsoc_cycles);
+  }
+  if (tb->verbose >= VerboseInfo5 && tb->vsoc_cycles % 10'000'000 == 0) {
+    printf("[INFO] vsoc cycles: %lu\n", tb->vsoc_cycles);
+  }
+  if (tb->verbose >= VerboseInfo4 && tb->vsoc_cycles % 100'000'000 == 0) {
+    printf("[INFO] vsoc cycles: %lu\n", tb->vsoc_cycles);
+  }
   tb->vsoc_cycles++;
 }
 
@@ -411,7 +431,9 @@ uint32_t v_mem_read(TestBench* tb, uint32_t addr) {
 }
 
 void v_mem_write(TestBench* tb, uint8_t wen, uint8_t wbmask, uint32_t addr, uint32_t wdata) {
+  tb->vcpu_cpu->is_mem_write = wen;
   if (wen) {
+    tb->vcpu_cpu->written_address = addr;
     if (addr >= FLASH_START && addr < FLASH_END-3) {
       // NOTE: flash is read only
       if (tb->verbose >= VerboseWarning) {
@@ -454,23 +476,48 @@ void vcpu_flash_init(TestBench* tb, uint8_t* data, uint32_t size) {
   for (uint32_t i = 0; i < size; i++) {
     tb->vcpu_cpu->flash[i] = data[i];
   }
-  printf("[INFO] vcpu flash written: %u bytes\n", size);
+  if (tb->verbose >= VerboseInfo4) {
+    printf("[INFO] vcpu flash written: %u bytes\n", size);
+  }
 }
 
 void vcpu_tick(TestBench* tb) {
   tb->vcpu->eval();
   if (tb->is_trace) {
-    tb->trace->dump(tb->trace_dumps++);
+    if (tb->trace_dumps > 100'000'000) {
+      printf("[WARNING] vcpu too much trace dumps: %llu \n", tb->trace_dumps);
+    }
+    else {
+      tb->trace->dump(tb->trace_dumps++);
+    }
   }
   tb->vcpu_ticks++;
   tb->vcpu_cycles = tb->vcpu_ticks / 2;
-  if (tb->is_cycles && tb->vcpu_ticks % 2'000'000 == 0) printf("[INFO] vcpu cycles: %lu\n", tb->vcpu_cycles);
-  printf("cpu tick: %lu\n", tb->vcpu_ticks);
+  if (tb->verbose >= VerboseInfo6 && tb->vcpu_ticks % 2'000'000 == 0) {
+    printf("[INFO] vcpu cycles: %lu\n", tb->vcpu_cycles);
+  }
+  if (tb->verbose >= VerboseInfo5 && tb->vcpu_ticks % 20'000'000 == 0) {
+    printf("[INFO] vcpu cycles: %lu\n", tb->vcpu_cycles);
+  }
+  if (tb->verbose >= VerboseInfo4 && tb->vcpu_ticks % 200'000'000 == 0) {
+    printf("[INFO] vcpu cycles: %lu\n", tb->vcpu_cycles);
+  }
+  if (tb->verbose >= VerboseInfo6) {
+    printf("vcpu tick: %lu, %lu\n", tb->vcpu_ticks, tb->trace_dumps);
+  }
 
   tb->vcpu->clock ^= 1;
   tb->vcpu->eval();
+  tb->vcpu_cpu->clock_pre = tb->vcpu_cpu->clock_now;
+  tb->vcpu_cpu->clock_now = tb->vcpu->clock;
+
   if (tb->is_trace) {
-    tb->trace->dump(tb->trace_dumps++);
+    if (tb->trace_dumps > 100'000'000) {
+      printf("[WARNING] vcpu too much trace dumps: %llu \n", tb->trace_dumps);
+    }
+    else {
+      tb->trace->dump(tb->trace_dumps++);
+    }
   }
 }
 
@@ -542,7 +589,9 @@ void vcpu_subtick(TestBench* tb) {
       tb->vcpu_cpu->io_ifu_addr     = tb->vcpu->io_ifu_addr;
       uint64_t delay_ticks          = 2 * random_range(tb->random_gen, tb->mem_delay_min, tb->mem_delay_max);
       tb->vcpu_cpu->io_ifu_waitRespValid = delay_ticks;
-      printf("delay_ticks: %lu, address: 0x%x\n", delay_ticks, tb->vcpu_cpu->io_ifu_addr);
+      if (tb->verbose >= VerboseInfo5) {
+        printf("ifu delay_ticks: %lu, address: 0x%x\n", delay_ticks, tb->vcpu_cpu->io_ifu_addr);
+      }
     }
   }
   if (tb->vcpu_cpu->io_ifu_waitRespValid > 0) {
@@ -553,22 +602,30 @@ void vcpu_subtick(TestBench* tb) {
     tb->vcpu_cpu->io_ifu_reqValid = 0;
     tb->vcpu_cpu->io_ifu_respValid_ticks = 2;
     tb->vcpu->io_ifu_rdata = v_mem_read(tb, tb->vcpu_cpu->io_ifu_addr);
-    printf("ifu read: 0x%x\n", tb->vcpu->io_ifu_rdata);
+    if (tb->verbose >= VerboseInfo5) {
+      printf("ifu read: 0x%x\n", tb->vcpu->io_ifu_rdata);
+    }
   }
 
   if (tb->vcpu_cpu->io_lsu_respValid_ticks > 0) {
     tb->vcpu_cpu->io_lsu_respValid_ticks--;
+    if (tb->verbose >= VerboseInfo5) {
+      printf("lsu respValid ticks: %lu, address: 0x%x\n", tb->vcpu_cpu->io_lsu_respValid_ticks, tb->vcpu_cpu->io_lsu_addr);
+    }
   }
   if (tb->vcpu_cpu->io_lsu_respValid_ticks == 0) {
     tb->vcpu->io_lsu_respValid = 0;
-    if (tb->vcpu->io_lsu_reqValid && !tb->vcpu_cpu->io_lsu_reqValid) {
-      tb->vcpu_cpu->io_lsu_reqValid = tb->vcpu->io_lsu_reqValid;
-      tb->vcpu_cpu->io_lsu_addr     = tb->vcpu->io_lsu_addr;
-      tb->vcpu_cpu->io_lsu_wdata    = tb->vcpu->io_lsu_wdata;
-      tb->vcpu_cpu->io_lsu_wmask    = tb->vcpu->io_lsu_wmask;
-      tb->vcpu_cpu->io_lsu_wen      = tb->vcpu->io_lsu_wen;
-      uint64_t delay_ticks          = 2 * random_range(tb->random_gen, tb->mem_delay_min, tb->mem_delay_max);
-      tb->vcpu_cpu->io_lsu_waitRespValid = delay_ticks;
+  }
+  if (tb->vcpu->io_lsu_reqValid && tb->vcpu_cpu->clock_now && !tb->vcpu_cpu->clock_pre) {
+    tb->vcpu_cpu->io_lsu_reqValid = tb->vcpu->io_lsu_reqValid;
+    tb->vcpu_cpu->io_lsu_addr     = tb->vcpu->io_lsu_addr;
+    tb->vcpu_cpu->io_lsu_wdata    = tb->vcpu->io_lsu_wdata;
+    tb->vcpu_cpu->io_lsu_wmask    = tb->vcpu->io_lsu_wmask;
+    tb->vcpu_cpu->io_lsu_wen      = tb->vcpu->io_lsu_wen;
+    uint64_t delay_ticks          = 2 * random_range(tb->random_gen, tb->mem_delay_min, tb->mem_delay_max);
+    tb->vcpu_cpu->io_lsu_waitRespValid = delay_ticks;
+    if (tb->verbose >= VerboseInfo5) {
+      printf("lsu delay_ticks: %lu, address: 0x%x\n", delay_ticks, tb->vcpu_cpu->io_lsu_addr);
     }
   }
   if (tb->vcpu_cpu->io_lsu_waitRespValid > 0) {
@@ -580,19 +637,29 @@ void vcpu_subtick(TestBench* tb) {
     tb->vcpu_cpu->io_lsu_respValid_ticks = 2;
     v_mem_write(tb, tb->vcpu_cpu->io_lsu_wen, tb->vcpu_cpu->io_lsu_wmask, tb->vcpu_cpu->io_lsu_addr, tb->vcpu_cpu->io_lsu_wdata);
     tb->vcpu->io_lsu_rdata = v_mem_read(tb, tb->vcpu_cpu->io_lsu_addr);
+    if (tb->verbose >= VerboseInfo5) {
+      if (tb->vcpu_cpu->io_lsu_wen) {
+        printf("lsu write:0x%x to   0x%x\n", tb->vcpu->io_lsu_wdata, tb->vcpu_cpu->io_lsu_addr);
+      }
+      printf("lsu read: 0x%x from 0x%x\n", tb->vcpu->io_lsu_rdata, tb->vcpu_cpu->io_lsu_addr);
+    }
   }
 }
 
 BreakCode vcpu_fetch_exec(TestBench* tb) {
   tb->vcpu_cpu->minstret_start = tb->vcpu_cpu->minstret;
-  printf("============== fetch#%u start %u tick, %u dump =================\n", tb->vcpu_cpu->minstret_start, tb->vcpu_ticks, tb->trace_dumps);
+  if (tb->verbose >= VerboseInfo5) {
+    printf("============== fetch#%u start %u tick, %u dump =================\n", tb->vcpu_cpu->minstret_start, tb->vcpu_ticks, tb->trace_dumps);
+  }
   BreakCode break_code = NoBreak;
   while (break_code == NoBreak) {
     vcpu_tick(tb);
     vcpu_subtick(tb);
     break_code = vcpu_break_code(tb);
   }
-  printf("============== fetch#%u end   %u tick, %u dump =================\n", tb->vcpu_cpu->minstret_start, tb->vcpu_ticks, tb->trace_dumps);
+  if (tb->verbose >= VerboseInfo5) {
+    printf("============== fetch#%u end   %u tick, %u dump =================\n", tb->vcpu_cpu->minstret_start, tb->vcpu_ticks, tb->trace_dumps);
+  }
   return break_code;
 }
 
@@ -653,15 +720,27 @@ bool compare_vcpu_gold(TestBench* tb) {
   if (tb->is_memcmp) {
     result &= memcmp(tb->gcpu->mem, tb->vcpu_cpu->mem, MEM_SIZE) == 0;
   }
-  else if (tb->gcpu->is_mem_write) {
-    uint32_t address0 = tb->gcpu->written_address & ~3;
-    uint32_t address4 = tb->gcpu->written_address & ~3 + 4;
-    uint32_t v = v_mem_read(tb,       address0);
-    uint32_t g = g_mem_read(tb->gcpu, address0);
-    result &= compare_mem(tb->vsoc_cycles, tb->gcpu->written_address, v, g);
-    v = v_mem_read(tb,       address4);
-    g = g_mem_read(tb->gcpu, address4);
-    result &= compare_mem(tb->vsoc_cycles, tb->gcpu->written_address, v, g);
+  else {
+    if (tb->gcpu->is_mem_write) {
+      uint32_t address0 = tb->gcpu->written_address & ~3;
+      uint32_t address4 = tb->gcpu->written_address & ~3 + 4;
+      uint32_t v = v_mem_read(tb,       address0);
+      uint32_t g = g_mem_read(tb->gcpu, address0);
+      result &= compare_mem(tb->vsoc_cycles, address0, v, g);
+      v = v_mem_read(tb,       address4);
+      g = g_mem_read(tb->gcpu, address4);
+      result &= compare_mem(tb->vsoc_cycles, address4, v, g);
+    }
+    if (tb->vcpu_cpu->is_mem_write) {
+      uint32_t address0 = tb->vcpu_cpu->written_address & ~3;
+      uint32_t address4 = tb->vcpu_cpu->written_address & ~3 + 4;
+      uint32_t v = v_mem_read(tb,       address0);
+      uint32_t g = g_mem_read(tb->gcpu, address0);
+      result &= compare_mem(tb->vsoc_cycles, address0, v, g);
+      v = v_mem_read(tb,       address4);
+      g = g_mem_read(tb->gcpu, address4);
+      result &= compare_mem(tb->vsoc_cycles, address4, v, g);
+    }
   }
   if (!result) {
     for (uint32_t i = 0; i < MEM_SIZE; i++) {
@@ -700,6 +779,9 @@ bool test_instructions(TestBench* tb) {
   if (tb->is_vsoc)  {
     vsoc_reset(tb);
     vsoc_flash_init((uint8_t*)tb->insts, tb->flash_size);
+    if (tb->verbose >= VerboseInfo4) {
+      printf("[INFO] vsoc flash written: %u bytes\n", tb->flash_size);
+    }
   }
   if (tb->is_vcpu) {
     vcpu_reset(tb);
@@ -734,7 +816,9 @@ bool test_instructions(TestBench* tb) {
     if (tb->is_vsoc) {
       vsoc_fetch_exec(tb);
       if (tb->vsoc_cpu->ebreak) {
-        printf("[INFO] vsoc ebreak\n");
+        if (tb->verbose >= VerboseInfo4) {
+          printf("[INFO] vsoc ebreak\n");
+        }
         if (tb->is_check && tb->vsoc_cpu->regs[10] != 0) {
           printf("[FAILED] test is not successful: vsoc returned %u\n", tb->vsoc_cpu->regs[10]);
           is_test_success=false;
@@ -748,7 +832,9 @@ bool test_instructions(TestBench* tb) {
     if (tb->is_vcpu) {
       vcpu_fetch_exec(tb);
       if (tb->vcpu_cpu->ebreak) {
-        printf("[INFO] vcpu ebreak\n");
+        if (tb->verbose >= VerboseInfo4) {
+          printf("[INFO] vcpu ebreak\n");
+        }
         if (tb->is_check && tb->vcpu_cpu->regs[10] != 0) {
           printf("[FAILED] test is not successful: vcpu returned %u\n", tb->vcpu_cpu->regs[10]);
           is_test_success=false;
@@ -761,7 +847,9 @@ bool test_instructions(TestBench* tb) {
     if (tb->is_gold) {
       uint8_t ebreak = cpu_eval(tb->gcpu);
       if (ebreak) {
-        printf("[INFO] gcpu ebreak\n");
+        if (tb->verbose >= VerboseInfo4) {
+          printf("[INFO] gcpu ebreak\n");
+        }
         if (tb->is_check && tb->gcpu->regs[10] != 0) {
           printf("[FAILED] test is not successful: gcpu returned %u\n", tb->gcpu->regs[10]);
           is_test_success=false;
@@ -839,17 +927,23 @@ bool test_instructions(TestBench* tb) {
     }
   }
   if (tb->is_vsoc) {
-    printf("[INFO] vsoc finished:%u cycles, %u retired instructions\n", tb->vsoc_cycles, tb->vsoc_cpu->minstret);
+    if (tb->verbose >= VerboseInfo4) {
+      printf("[INFO] vsoc finished:%u cycles, %u retired instructions\n", tb->vsoc_cycles, tb->vsoc_cpu->minstret);
+    }
   }
   if (tb->is_vcpu) {
-    printf("[INFO] vcpu finished:%u cycles, %u retired instructions\n", tb->vcpu_cycles, tb->vcpu_cpu->minstret);
+    if (tb->verbose >= VerboseInfo4) {
+      printf("[INFO] vcpu finished:%u cycles, %u retired instructions\n", tb->vcpu_cycles, tb->vcpu_cpu->minstret);
+    }
   }
   return is_test_success;
 }
 
 bool test_bin(TestBench* tb) {
   uint8_t* data = NULL; size_t size = 0;
-  printf("[INFO] read file %s\n", tb->bin_file);
+  if (tb->verbose >= VerboseInfo4) {
+    printf("[INFO] read file %s\n", tb->bin_file);
+  }
   int ok = read_bin_file(tb->bin_file, &data, &size);
   if (!ok) return false;
 

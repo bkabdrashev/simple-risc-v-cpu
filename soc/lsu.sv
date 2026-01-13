@@ -134,24 +134,28 @@ module lsu (
 
   lsu_state next_state;
   lsu_state curr_state;
-
+  logic     io_reqValid_q;
+  logic     io_reqValid_d;
   always_ff @(posedge clock or posedge reset) begin
     if (reset) begin
-      curr_state  <= LSU_IDLE;
+      curr_state <= LSU_IDLE;
+      io_reqValid_q <= 1'b0;
     end else begin
-      curr_state  <= next_state;
+      curr_state    <= next_state;
+      io_reqValid_q <= io_reqValid_d;
     end
   end
 
+  assign io_reqValid = io_reqValid_d | io_reqValid_q;
   always_comb begin
-    io_reqValid    = 1'b0;
+    io_reqValid_d  = 1'b0;
     respValid      = 1'b0;
     is_second_part = 1'b0;
     first_rdata    = io_rdata[31:8];
     case (curr_state)
       LSU_IDLE: begin
         if (reqValid) begin
-          io_reqValid   = 1'b1;
+          io_reqValid_d   = 1'b1;
           if (io_respValid) begin
             respValid      = ~is_misalign;
             next_state     = is_misalign ? LSU_WAIT_MIS_TWO_REQ : LSU_IDLE;
@@ -170,7 +174,6 @@ module lsu (
           respValid  = 1'b1;
         end
         else begin
-          io_reqValid = 1'b1;
           next_state  = LSU_WAIT_ONE;
         end
       end
@@ -187,7 +190,7 @@ module lsu (
       end
       LSU_WAIT_MIS_TWO_REQ: begin
         is_second_part = 1'b1;
-        io_reqValid    = 1'b1;
+        io_reqValid_d  = 1'b1;
         if (io_respValid) begin
           next_state  = LSU_IDLE;
           first_rdata = first_rdata_q;
@@ -200,7 +203,7 @@ module lsu (
       LSU_WAIT_MIS_ONE: begin
         if (io_respValid) begin
           is_second_part = 1'b1;
-          io_reqValid    = 1'b1;
+          io_reqValid_d    = 1'b1;
           respValid      = 1'b0;
           next_state     = LSU_WAIT_MIS_TWO;
         end

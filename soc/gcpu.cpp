@@ -48,7 +48,9 @@ enum VerboseLevel {
   VerboseError,
   VerboseFailed,
   VerboseWarning,
-  VerboseInfo,
+  VerboseInfo4,
+  VerboseInfo5,
+  VerboseInfo6,
 };
 
 struct Vuart {

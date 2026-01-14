@@ -21,8 +21,6 @@ typedef VysyxSoCTop VSoC;
 struct Vcpucpu {
   uint8_t & ebreak;
   uint32_t& pc;
-  uint64_t& mcycle;
-  uint64_t& minstret;
   VlUnpacked<uint32_t, 16>&  regs;
 
   uint8_t mem[MEM_SIZE];
@@ -35,7 +33,9 @@ struct Vcpucpu {
   uint8_t  is_mem_write;
   uint32_t written_address;
 
+  VEventCounts event_counts;
   uint64_t minstret_start;
+
   uint8_t  io_ifu_reqValid;
   uint32_t io_ifu_addr;
 
@@ -148,13 +148,11 @@ TestBench new_testbench(TestBenchConfig config) {
 
   tb.vsoc = new VSoC;
   tb.vsoc_cpu = new VSoCcpu{
-    .ebreak      = tb.vsoc->rootp->ysyxSoCTop__DOT__dut__DOT__asic__DOT__cpu__DOT__u_cpu__DOT__is_ebreak,
-    .pc          = tb.vsoc->rootp->ysyxSoCTop__DOT__dut__DOT__asic__DOT__cpu__DOT__u_cpu__DOT__pc,
-    .mcycle      = tb.vsoc->rootp->ysyxSoCTop__DOT__dut__DOT__asic__DOT__cpu__DOT__u_cpu__DOT__u_csr__DOT__mcycle,
-    .minstret    = tb.vsoc->rootp->ysyxSoCTop__DOT__dut__DOT__asic__DOT__cpu__DOT__u_cpu__DOT__u_csr__DOT__minstret,
-    .regs        = tb.vsoc->rootp->ysyxSoCTop__DOT__dut__DOT__asic__DOT__cpu__DOT__u_cpu__DOT__u_rf__DOT__regs,
-    .mem         = tb.vsoc->rootp->ysyxSoCTop__DOT__dut__DOT__sdram__DOT__mem_ext__DOT__Memory,
-    .uart        = {
+    .ebreak        = tb.vsoc->rootp->ysyxSoCTop__DOT__dut__DOT__asic__DOT__cpu__DOT__u_cpu__DOT__is_ebreak,
+    .pc            = tb.vsoc->rootp->ysyxSoCTop__DOT__dut__DOT__asic__DOT__cpu__DOT__u_cpu__DOT__pc,
+    .regs          = tb.vsoc->rootp->ysyxSoCTop__DOT__dut__DOT__asic__DOT__cpu__DOT__u_cpu__DOT__u_rf__DOT__regs,
+    .mem           = tb.vsoc->rootp->ysyxSoCTop__DOT__dut__DOT__sdram__DOT__mem_ext__DOT__Memory,
+    .uart          = {
       .ier = tb.vsoc->rootp->ysyxSoCTop__DOT__dut__DOT__asic__DOT__luart__DOT__muart__DOT__Uregs__DOT__ier,
       .iir = tb.vsoc->rootp->ysyxSoCTop__DOT__dut__DOT__asic__DOT__luart__DOT__muart__DOT__Uregs__DOT__iir,
       .fcr = tb.vsoc->rootp->ysyxSoCTop__DOT__dut__DOT__asic__DOT__luart__DOT__muart__DOT__Uregs__DOT__fcr,
@@ -172,17 +170,39 @@ TestBench new_testbench(TestBenchConfig config) {
       .lsr7 = tb.vsoc->rootp->ysyxSoCTop__DOT__dut__DOT__asic__DOT__luart__DOT__muart__DOT__Uregs__DOT__lsr7r,
       .lsr_packed = false,
     },
+    .event_counts  = {
+      .mcycle        = tb.vsoc->rootp->ysyxSoCTop__DOT__dut__DOT__asic__DOT__cpu__DOT__u_cpu__DOT__u_csr__DOT__mcycle,
+      .minstret      = tb.vsoc->rootp->ysyxSoCTop__DOT__dut__DOT__asic__DOT__cpu__DOT__u_cpu__DOT__u_csr__DOT__minstret,
+      .mifu_wait     = tb.vsoc->rootp->ysyxSoCTop__DOT__dut__DOT__asic__DOT__cpu__DOT__u_cpu__DOT__u_csr__DOT__mhpmcounter[0],
+      .mlsu_wait     = tb.vsoc->rootp->ysyxSoCTop__DOT__dut__DOT__asic__DOT__cpu__DOT__u_cpu__DOT__u_csr__DOT__mhpmcounter[1],
+      .mload_seen    = tb.vsoc->rootp->ysyxSoCTop__DOT__dut__DOT__asic__DOT__cpu__DOT__u_cpu__DOT__u_csr__DOT__mhpmcounter[2],
+      .mstore_seen   = tb.vsoc->rootp->ysyxSoCTop__DOT__dut__DOT__asic__DOT__cpu__DOT__u_cpu__DOT__u_csr__DOT__mhpmcounter[3],
+      .mcalc_seen    = tb.vsoc->rootp->ysyxSoCTop__DOT__dut__DOT__asic__DOT__cpu__DOT__u_cpu__DOT__u_csr__DOT__mhpmcounter[4],
+      .mjump_seen    = tb.vsoc->rootp->ysyxSoCTop__DOT__dut__DOT__asic__DOT__cpu__DOT__u_cpu__DOT__u_csr__DOT__mhpmcounter[5],
+      .mbranch_seen  = tb.vsoc->rootp->ysyxSoCTop__DOT__dut__DOT__asic__DOT__cpu__DOT__u_cpu__DOT__u_csr__DOT__mhpmcounter[6],
+      .mbranch_taken = tb.vsoc->rootp->ysyxSoCTop__DOT__dut__DOT__asic__DOT__cpu__DOT__u_cpu__DOT__u_csr__DOT__mhpmcounter[7],
+    },
   };
 
   tb.vcpu = new Vcpu;
   tb.vcpu_cpu = new Vcpucpu {
-    .ebreak      = tb.vcpu->rootp->cpu__DOT__is_ebreak,
-    .pc          = tb.vcpu->rootp->cpu__DOT__pc,
-    .mcycle      = tb.vcpu->rootp->cpu__DOT__u_csr__DOT__mcycle,
-    .minstret    = tb.vcpu->rootp->cpu__DOT__u_csr__DOT__minstret,
-    .regs        = tb.vcpu->rootp->cpu__DOT__u_rf__DOT__regs,
+    .ebreak        = tb.vcpu->rootp->cpu__DOT__is_ebreak,
+    .pc            = tb.vcpu->rootp->cpu__DOT__pc,
+    .regs          = tb.vcpu->rootp->cpu__DOT__u_rf__DOT__regs,
     .is_mem_write    = false,
     .written_address = 0,
+    .event_counts  = {
+      .mcycle          = tb.vcpu->rootp->cpu__DOT__u_csr__DOT__mcycle,
+      .minstret        = tb.vcpu->rootp->cpu__DOT__u_csr__DOT__minstret,
+      .mifu_wait       = tb.vcpu->rootp->cpu__DOT__u_csr__DOT__mhpmcounter[0],
+      .mlsu_wait       = tb.vcpu->rootp->cpu__DOT__u_csr__DOT__mhpmcounter[1],
+      .mload_seen      = tb.vcpu->rootp->cpu__DOT__u_csr__DOT__mhpmcounter[2],
+      .mstore_seen     = tb.vcpu->rootp->cpu__DOT__u_csr__DOT__mhpmcounter[3],
+      .mcalc_seen      = tb.vcpu->rootp->cpu__DOT__u_csr__DOT__mhpmcounter[4],
+      .mjump_seen      = tb.vcpu->rootp->cpu__DOT__u_csr__DOT__mhpmcounter[5],
+      .mbranch_seen    = tb.vcpu->rootp->cpu__DOT__u_csr__DOT__mhpmcounter[6],
+      .mbranch_taken   = tb.vcpu->rootp->cpu__DOT__u_csr__DOT__mhpmcounter[7],
+    },
   };
 
   tb.gcpu = new Gcpu{.verbose = tb.verbose};
@@ -387,12 +407,12 @@ void vsoc_reset(TestBench* tb) {
 }
 
 void vsoc_fetch_exec(TestBench* tb) {
-  tb->vsoc_cpu->minstret_start = tb->vsoc_cpu->minstret;
+  tb->vsoc_cpu->minstret_start = tb->vsoc_cpu->event_counts.minstret;
   while (1) {
     vsoc_cycle(tb);
     if (tb->max_cycles && tb->vsoc_cycles >= tb->max_cycles) break;
     if (tb->vsoc_cpu->ebreak) break;
-    if (tb->vsoc_cpu->minstret != tb->vsoc_cpu->minstret_start) break;
+    if (tb->vsoc_cpu->event_counts.minstret != tb->vsoc_cpu->minstret_start) break;
   }
 }
 
@@ -578,7 +598,7 @@ BreakCode vcpu_break_code(TestBench* tb) {
   BreakCode break_code = NoBreak;
   if (tb->max_cycles && tb->vcpu_cycles >= tb->max_cycles)    break_code = Timeout;
   if (tb->vcpu_cpu->ebreak)                                   break_code = Ebreak;
-  if (tb->vcpu_cpu->minstret != tb->vcpu_cpu->minstret_start) break_code = InstRet;
+  if (tb->vcpu_cpu->event_counts.minstret != tb->vcpu_cpu->minstret_start) break_code = InstRet;
   return break_code;
 }
 
@@ -651,7 +671,7 @@ void vcpu_subtick(TestBench* tb) {
 }
 
 BreakCode vcpu_fetch_exec(TestBench* tb) {
-  tb->vcpu_cpu->minstret_start = tb->vcpu_cpu->minstret;
+  tb->vcpu_cpu->minstret_start = tb->vcpu_cpu->event_counts.minstret;
   if (tb->verbose >= VerboseInfo5) {
     printf("============== fetch#%u start %u tick, %u dump =================\n", tb->vcpu_cpu->minstret_start, tb->vcpu_ticks, tb->trace_dumps);
   }
@@ -785,6 +805,32 @@ bool compare_vcpu_vsoc(TestBench* tb) {
   return result;
 }
 
+void print_finished_stat(TestBench* tb, const char* cpu_name, VEventCounts event_counts) {
+  if (tb->verbose >= VerboseInfo4) {
+    printf("[INFO] %s finished:\n"
+           "  cycles:       %lu\n"
+           "  instrets:     %lu\n"
+           "  ifu wait:     %lu\n"
+           "  lsu wait:     %lu\n"
+           "  load   seen:  %lu\n"
+           "  store  seen:  %lu\n"
+           "  calc   seen:  %lu\n"
+           "  jump   seen:  %lu\n"
+           "  branch seen:  %lu\n"
+           "  branch taken: %lu\n",
+           cpu_name,
+           event_counts.mcycle,
+           event_counts.minstret,
+           event_counts.mifu_wait,
+           event_counts.mlsu_wait,
+           event_counts.mload_seen,
+           event_counts.mstore_seen,
+           event_counts.mcalc_seen,
+           event_counts.mjump_seen,
+           event_counts.mbranch_seen,
+           event_counts.mbranch_taken);
+  }
+}
 bool test_instructions(TestBench* tb) {
   if (tb->verbose >= VerboseInfo5) {
     print_all_instructions(tb);
@@ -838,8 +884,8 @@ bool test_instructions(TestBench* tb) {
         }
       }
       // NOTE: cycles are offset by number of cycles during the reset, since reset period is doubled for vsoc
-      is_test_success &= compare_reg(tb->vsoc_ticks, "vsoc.mcycle  ",   tb->vsoc_cpu->mcycle,   tb->vsoc_cycles - tb->reset_cycles);
-      is_test_success &= compare_reg(tb->vsoc_ticks, "vsoc.minstret", tb->vsoc_cpu->minstret, tb->instrets);
+      is_test_success &= compare_reg(tb->vsoc_ticks, "vsoc.mcycle  ", tb->vsoc_cpu->event_counts.mcycle,   tb->vsoc_cycles - tb->reset_cycles);
+      is_test_success &= compare_reg(tb->vsoc_ticks, "vsoc.minstret", tb->vsoc_cpu->event_counts.minstret, tb->instrets);
     }
 
     if (tb->is_vcpu) {
@@ -853,8 +899,8 @@ bool test_instructions(TestBench* tb) {
           is_test_success=false;
         }
       }
-      is_test_success &= compare_reg(tb->vcpu_ticks, "vcpu.mcycle  ",   tb->vcpu_cpu->mcycle,   tb->vcpu_cycles);
-      is_test_success &= compare_reg(tb->vcpu_ticks, "vcpu.minstret", tb->vcpu_cpu->minstret, tb->instrets);
+      is_test_success &= compare_reg(tb->vcpu_ticks, "vcpu.mcycle  ", tb->vcpu_cpu->event_counts.mcycle,   tb->vcpu_cycles);
+      is_test_success &= compare_reg(tb->vcpu_ticks, "vcpu.minstret", tb->vcpu_cpu->event_counts.minstret, tb->instrets);
     }
 
     if (tb->is_gold) {
@@ -940,20 +986,10 @@ bool test_instructions(TestBench* tb) {
     }
   }
   if (tb->is_vsoc) {
-    if (tb->verbose >= VerboseInfo4) {
-      printf("[INFO] vsoc finished:\n"
-             "  cycles:   %lu\n"
-             "  instrets: %lu\n",
-             tb->vsoc_cycles, tb->vsoc_cpu->minstret);
-    }
+    print_finished_stat(tb, "vsoc", tb->vsoc_cpu->event_counts);
   }
   if (tb->is_vcpu) {
-    if (tb->verbose >= VerboseInfo4) {
-      printf("[INFO] vcpu finished:\n"
-             "  cycles:   %lu\n"
-             "  instrets: %lu\n",
-             tb->vcpu_cycles, tb->vcpu_cpu->minstret);
-    }
+    print_finished_stat(tb, "vcpu", tb->vcpu_cpu->event_counts);
   }
   return is_test_success;
 }

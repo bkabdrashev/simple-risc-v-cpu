@@ -73,15 +73,28 @@ struct Vuart {
   bool      lsr_packed;
 };
 
+struct VEventCounts {
+  uint64_t& mcycle;
+  uint64_t& minstret;
+  uint64_t& mifu_wait;
+  uint64_t& mlsu_wait;
+  uint64_t& mload_seen;
+  uint64_t& mstore_seen;
+  uint64_t& mcalc_seen;
+  uint64_t& mjump_seen;
+  uint64_t& mbranch_seen;
+  uint64_t& mbranch_taken;
+};
+
 struct VSoCcpu {
   uint8_t & ebreak;
   uint32_t& pc;
-  uint64_t& mcycle;
-  uint64_t& minstret;
   VlUnpacked<uint32_t, 16>&  regs;
   VlUnpacked<uint16_t, 16777216>& mem;
-  uint64_t minstret_start;
   Vuart uart;
+
+  VEventCounts event_counts;
+  uint64_t minstret_start;
 };
 
 struct Gcpu {

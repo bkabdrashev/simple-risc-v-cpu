@@ -57,5 +57,20 @@ Usage:
        +---+    |             |
        |EXU|<---+             |
        +---+<-----------------+
+
 ```
+
+### Instruction Flow
+- IFU takes a request to execute an instruction at an address PC.
+- IDU takes the fetched instruction and combinatorially computes data and instruction type.
+- if the instruction type is Load/Store, then IDU sends the request to the LSU.
+- LSU performs memory operation and then sends response to EXU
+- EXU -- based on instruction type -- combinatorially computes results. 
+- EXU issues request to IFU for the next instruction.
+
+### Instruction Cycles
+- Instruction fetches  in 1-N cycle.
+- Instruction decodes  in 0   cycle.
+- Instruction executes in 0   cycle.
+- Load/Store instruction completes in 1-N cycle.
 

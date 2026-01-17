@@ -140,7 +140,6 @@ LSU extra state removal. Note that it made numbers slightly worse, despite havin
 | u_exu.next_state_2__OA211X1P4H7 | **clock_gating_default** | min        | 0.160f     | -0.000        | 0.000 | 0.160 | NA        |
 | u_exu.curr_state_2__NOR3X0P5H7L | **clock_gating_default** | min        | 0.151r     | -0.020        | 0.000 | 0.171 | NA        |
 +---------------------------------+--------------------------+------------+------------+---------------+-------+-------+-----------+
-
 MicroBench PASS
   cycles:       2309857884
   instrets:      202412647
@@ -152,3 +151,48 @@ MicroBench PASS
   jump   seen:     4179960
   branch seen:    52913362
   branch taken:   38589077 
+
+====================================================================================================================================
+Generate the report at 2026-01-14T20:22:24, git: e7c1f34631832f01266e34a9e017c7a8f2835ab3
+
+Added apb delay module. The response is delayed by ~5 times.
+====================================================================================================================================
+
+ Chip area for module '\cpu': 21202.720000 of which used for sequential elements: 9549.120000 (45.04%)
+
++---------------------------+--------------------------+------------+------------+---------------+-------+-------+-----------+
+| Endpoint                  | Clock Group              | Delay Type | Path Delay | Path Required | CPPR  | Slack | Freq(MHz) |
++---------------------------+--------------------------+------------+------------+---------------+-------+-------+-----------+
+| u_rf.regs[9]_10__reg_p:D  | core_clock               | max        | 1.838f     | 9.868         | 0.000 | 8.030 | 507.701   |
+| u_rf.regs[15]_10__reg_p:D | core_clock               | max        | 1.838f     | 9.868         | 0.000 | 8.030 | 507.701   |
+| u_rf.regs[13]_10__reg_p:D | core_clock               | max        | 1.838f     | 9.868         | 0.000 | 8.030 | 507.701   |
+| u_rf.regs[12]_10__reg_p:D | core_clock               | max        | 1.838f     | 9.868         | 0.000 | 8.030 | 507.701   |
+| u_rf.regs[3]_10__reg_p:D  | core_clock               | max        | 1.838f     | 9.868         | 0.000 | 8.030 | 507.701   |
+| io_lsu_size_$_NOR__Y_A_$_ | **clock_gating_default** | max        | 1.587r     | 9.940         | 0.000 | 8.353 | NA        |
+| io_lsu_size_$_NOR__Y_A_$_ | **clock_gating_default** | max        | 1.587r     | 9.940         | 0.000 | 8.353 | NA        |
+| io_lsu_size_$_NOR__Y_A_$_ | **clock_gating_default** | max        | 1.584r     | 9.941         | 0.000 | 8.357 | NA        |
+| io_lsu_size_$_NOR__Y_A_$_ | **clock_gating_default** | max        | 1.584r     | 9.941         | 0.000 | 8.357 | NA        |
+| io_lsu_size_$_NOR__Y_A_$_ | **clock_gating_default** | max        | 1.584r     | 9.941         | 0.000 | 8.357 | NA        |
+| is_ebreak_reg_p:D         | core_clock               | min        | 0.113r     | -0.011        | 0.000 | 0.124 | NA        |
+| u_csr.mhpmcounter[1]_0__r | core_clock               | min        | 0.115r     | -0.012        | 0.000 | 0.127 | NA        |
+| u_csr.mcycle_0__reg_p:D   | core_clock               | min        | 0.115r     | -0.012        | 0.000 | 0.127 | NA        |
+| u_csr.mhpmcounter[5]_0__r | core_clock               | min        | 0.115r     | -0.012        | 0.000 | 0.127 | NA        |
+| u_csr.mhpmcounter[6]_0__r | core_clock               | min        | 0.115r     | -0.012        | 0.000 | 0.127 | NA        |
+| is_ebreak_INVX0P5H7L_A_Y_ | **clock_gating_default** | min        | 0.092f     | -0.004        | 0.000 | 0.095 | NA        |
+| is_ebreak_INVX0P5H7L_A_Y_ | **clock_gating_default** | min        | 0.091r     | -0.014        | 0.000 | 0.105 | NA        |
+| u_exu.curr_state_2__NOR3X | **clock_gating_default** | min        | 0.127f     | -0.009        | 0.000 | 0.135 | NA        |
+| u_exu.next_state_2__OA211 | **clock_gating_default** | min        | 0.160f     | -0.000        | 0.000 | 0.160 | NA        |
+| u_exu.curr_state_2__NOR3X | **clock_gating_default** | min        | 0.151r     | -0.020        | 0.000 | 0.171 | NA        |
++---------------------------+--------------------------+------------+------------+---------------+-------+-------+-----------+
+
+MicroBench PASS
+  cycles:       9960328268
+  instrets:      202452821
+  ifu wait:     8507390786
+  lsu wait:     1250484660
+  load   seen:    16387905
+  store  seen:     7371779
+  calc   seen:   121599041
+  jump   seen:     4180057
+  branch seen:    52913969
+  branch taken:   38589228

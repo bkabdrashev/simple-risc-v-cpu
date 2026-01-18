@@ -32,12 +32,18 @@ module icache (
   localparam LINE_N = 2**n;
   line_t lines [0:LINE_N-1];
 
-  logic [TAG_W-1:0] tag;
-  logic [    n-1:0] index;
-  line_t            line;
+  logic  [TAG_W-1:0]  tag;
+  logic  [    n-1:0]  index;
+  line_t              line;
+  logic               line_valid;
+  logic  [TAG_W-1:0]  line_tag;
+  logic  [DATA_W-1:0] line_data;
   assign tag    = addr[   31:m+n];
   assign index  = addr[m+n-1:  m];
   assign line   = lines[index];
+  assign line_valid = line.valid;
+  assign line_tag   = line.tag;
+  assign line_data  = line.data;
 
   generate
     for (genvar i = 0; i < LINE_N; i++) begin : gen_lines_ff
@@ -56,10 +62,10 @@ module icache (
   always_comb begin
     is_hit = 1'b0;
     rdata  = 32'b0;
-    if (line.valid) begin
-      if (line.tag == tag) begin
+    if (line_valid) begin
+      if (line_tag == tag) begin
         is_hit = 1'b1;
-        rdata  = line.data;
+        rdata  = line_data;
       end
     end
   end

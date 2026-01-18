@@ -385,6 +385,7 @@ void vsoc_tick(TestBench* tb) {
 void vsoc_cycle(TestBench* tb) {
   vsoc_tick(tb);
   vsoc_tick(tb);
+  tb->vsoc_cycles++;
   if (tb->verbose >= VerboseInfo6 && tb->vsoc_cycles % 10'000'000 == 0) {
     printf("[INFO] vsoc cycles: %lu\n", tb->vsoc_cycles);
   }
@@ -394,7 +395,6 @@ void vsoc_cycle(TestBench* tb) {
   if (tb->verbose >= VerboseInfo4 && tb->vsoc_cycles % 1'000'000'000 == 0) {
     printf("[INFO] vsoc cycles: %lu\n", tb->vsoc_cycles);
   }
-  tb->vsoc_cycles++;
 }
 
 void vsoc_reset(TestBench* tb) {

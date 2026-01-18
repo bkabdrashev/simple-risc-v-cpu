@@ -1,48 +1,65 @@
 module icache (
-  input  logic         clock,
-  input  logic         reset,
-
-  output logic        rdata,
+  input  logic        clock,
+  input  logic        reset,
   input  logic        wen,
   input  logic [31:0] wdata,
-  input  logic [31:0] addr);
+  input  logic [31:2] addr,
+  output logic        is_hit,
+  output logic [31:0] rdata);
 
   localparam m = 2;
   localparam n = 4;
-  localparam BLOCK_BYTES = 2**m; // b
-  localparam NUM_BLOCKS  = 2**n; // k
-  localparam TAG_SIZE    = 32-m-n;
-  localparam BLOCK_SIZE  = TAG_SIZE+1+32;
-  logic [TAG_SIZE-1:0] tag;
-  logic [   n-1:0] index;
-  logic [   m-1:0] offset;
-  assign tag    = addr[   31:m+n];
-  assign index  = addr[m+n-1:  m];
-  assign offset = addr[  m-1:  0];
-
-  logic [BLOCK_SIZE-1:0] blocks [0:NUM_BLOCKS];
+  localparam TAG_W    = 32-m-n;
+  localparam DATA_W   = 8 * (2**m);
 
 /*
-          31     0
-+---+-----+------+
-| v | tag | data |
-+---+-----+------+
+      ICACHE
+  +---+-----+------+
+  | 1 |TAG_W|DATA_W|
+  +---+-----+------+
+  | v | tag | data |
+  +---+-----+------+
+  |   |     |      | x16
+  +---+-----+------+
 */
 
-  assign block = blocks[offset];
-  assign valid = block[BLOCK_SIZE-1];
-  assign rtag  = block[TAG_SIZE+32-1:32];
-  always_ff @(posedge clock or posedge reset) begin
-    if (reset) begin
-      blocks[offset][BLOCK_SIZE-1] <= 1'b0;
-    end
-    else begin
-      if (wen) begin
-        if (valid) begin
-          if (rtag == tag) begin
-            blocks[offset] <= {1'b1, rtag, wdata};
-          end
+  typedef struct packed {
+    logic              valid;
+    logic [ TAG_W-1:0] tag;
+    logic [DATA_W-1:0] data;
+  } line_t;
+
+  localparam LINE_N = 2**n;
+  line_t lines [0:LINE_N-1];
+
+  logic [TAG_W-1:0] tag;
+  logic [    n-1:0] index;
+  line_t            line;
+  assign tag    = addr[   31:m+n];
+  assign index  = addr[m+n-1:  m];
+  assign line   = lines[index];
+
+  generate
+    for (genvar i = 0; i < LINE_N; i++) begin : gen_lines_ff
+      always_ff @(posedge clock or posedge reset) begin
+        if (reset) begin
+          lines[i].valid <= 1'b0;
         end
+        else if (wen && i == index) begin
+          lines[i] <= {1'b1, tag, wdata};
+        end
+      end
+    end
+  endgenerate
+
+
+  always_comb begin
+    is_hit = 1'b0;
+    rdata  = 32'b0;
+    if (line.valid) begin
+      if (line.tag == tag) begin
+        is_hit = 1'b1;
+        rdata  = line.data;
       end
     end
   end

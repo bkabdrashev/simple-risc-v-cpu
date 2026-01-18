@@ -7,6 +7,12 @@ module ifu (
   output logic [31:0] io_addr,
   output logic        io_reqValid,
 
+  output logic        icache_wen,
+  output logic [31:0] icache_wdata,
+  output logic [31:2] icache_addr,
+  input  logic        icache_hit,
+  input  logic [31:0] icache_rdata,
+ 
   input  logic [31:0] pc,
   input  logic        reqValid,
   output logic        respValid,
@@ -27,20 +33,31 @@ module ifu (
     end
   end
 
-  assign inst = io_rdata;
+  assign icache_addr = pc[31:2];
   always_comb begin
     io_reqValid = 1'b0;
     respValid   = 1'b0;
     next_state  = curr_state;
+    inst        = io_rdata;
     io_addr     = pc;
+    icache_wen   = 1'b0;
+    icache_wdata = 32'b0;
     case (curr_state)
       IFU_IDLE: begin
         if (reqValid) begin
-          io_reqValid = 1'b1;
-          next_state  = IFU_WAIT;
-          if (io_respValid) begin
-            respValid  = 1'b1;
-            next_state = IFU_IDLE;
+          if (icache_hit) begin
+            respValid = 1'b1;
+            inst      = icache_rdata;
+          end
+          else begin
+            io_reqValid = 1'b1;
+            next_state  = IFU_WAIT;
+            if (io_respValid) begin
+              respValid = 1'b1;
+              icache_wen   = 1'b1;
+              icache_wdata = io_rdata;
+              next_state = IFU_IDLE;
+            end
           end
         end
         else begin
@@ -50,6 +67,8 @@ module ifu (
       IFU_WAIT: begin
         if (io_respValid) begin
           respValid  = 1'b1;
+          icache_wen   = 1'b1;
+          icache_wdata = io_rdata;
           next_state = IFU_IDLE;
         end
         else begin

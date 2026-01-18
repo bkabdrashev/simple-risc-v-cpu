@@ -63,7 +63,7 @@ module exu (
       is_ebreak  <= 1'b0;
     end else begin
       curr_state <= next_state;
-      is_ebreak  <= inst_type == INST_EBREAK || is_ebreak;
+      is_ebreak  <= (inst_type == INST_EBREAK || is_ebreak) && (curr_state == EXU_EXECUTE);
     end
   end
 

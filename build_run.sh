@@ -40,7 +40,7 @@ verilator --trace -cc \
   -Wall \
   -I"$RTL_ROOT/soc" \
   soc/cpu.sv \
-  soc/rf.sv soc/pc.sv soc/exu.sv soc/idu.sv soc/alu.sv soc/csr.sv soc/com.sv \
+  soc/rf.sv soc/pc.sv soc/exu.sv soc/idu.sv soc/alu.sv soc/csr.sv soc/com.sv soc/icache.sv \
   --timescale "1ns/1ns" \
   --no-timing \
   --Mdir "$OBJ_CPU"

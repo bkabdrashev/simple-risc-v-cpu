@@ -76,6 +76,12 @@ start ------->|IFU|------->|IDU| -------> |LSU|
   logic [REG_W_END:0] csr_wdata;
   logic               csr_wen;
 
+  logic [REG_W_END:2] icache_addr;
+  logic [REG_W_END:0] icache_rdata;
+  logic [REG_W_END:0] icache_wdata;
+  logic               icache_hit;
+  logic               icache_wen;
+
   logic is_ebreak;
   logic is_instret;
   logic is_ifu_wait;
@@ -94,11 +100,26 @@ start ------->|IFU|------->|IDU| -------> |LSU|
     .wdata(pc_next),
     .rdata(pc));
 
+  icache u_icache(
+    .clock(clock),
+    .reset(reset),
+    .wen   (icache_wen),
+    .wdata (icache_wdata),
+    .addr  (icache_addr[31:2]),
+    .is_hit(icache_hit),
+    .rdata (icache_rdata));
+
   ifu u_ifu(
     .clock(clock),
     .reset(reset),
     .respValid   (ifu_respValid),
     .reqValid    (ifu_reqValid),
+
+    .icache_wen  (icache_wen),
+    .icache_wdata(icache_wdata),
+    .icache_addr (icache_addr),
+    .icache_hit  (icache_hit),
+    .icache_rdata(icache_rdata),
 
     .io_respValid(io_ifu_respValid),
     .io_reqValid (io_ifu_reqValid),

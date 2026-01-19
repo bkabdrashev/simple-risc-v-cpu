@@ -40,13 +40,11 @@ module ifu (
 
   always_comb begin
     inst = inst_q;
-    if (reqValid) begin
-      if (icache_hit) begin
-        inst = icache_rdata;
-      end
-      else if (io_respValid) begin
-        inst = io_rdata;
-      end
+    if (icache_hit) begin
+      inst = icache_rdata;
+    end
+    else if (io_respValid) begin
+      inst = io_rdata;
     end
   end
 

@@ -150,11 +150,11 @@ void g_mem_write(Gcpu* cpu, uint8_t wen, uint8_t wbmask, uint32_t addr, uint32_t
     else if (addr >= UART_START && addr < UART_END) {
     }
     else if (addr >= MEM_START && addr < MEM_END-3) {
-      addr -= MEM_START;
-      if (wbmask & 0b0001) cpu->mem[addr + 0] = (wdata >>  0) & 0xff;
-      if (wbmask & 0b0010) cpu->mem[addr + 1] = (wdata >>  8) & 0xff;
-      if (wbmask & 0b0100) cpu->mem[addr + 2] = (wdata >> 16) & 0xff;
-      if (wbmask & 0b1000) cpu->mem[addr + 3] = (wdata >> 24) & 0xff;
+      uint32_t mapped_addr = addr - MEM_START;
+      if (wbmask & 0b0001) cpu->mem[mapped_addr + 0] = (wdata >>  0) & 0xff;
+      if (wbmask & 0b0010) cpu->mem[mapped_addr + 1] = (wdata >>  8) & 0xff;
+      if (wbmask & 0b0100) cpu->mem[mapped_addr + 2] = (wdata >> 16) & 0xff;
+      if (wbmask & 0b1000) cpu->mem[mapped_addr + 3] = (wdata >> 24) & 0xff;
     }
     else {
       cpu->is_not_mapped = true;

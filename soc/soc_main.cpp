@@ -643,7 +643,7 @@ void vcpu_subtick(TestBench* tb) {
     }
   }
 
-  tb->vcpu->eval();
+  // tb->vcpu->eval();
 
   if (tb->vcpu_cpu->io_lsu_respValid_ticks > 0) {
     tb->vcpu_cpu->io_lsu_respValid_ticks--;
@@ -691,6 +691,8 @@ BreakCode vcpu_fetch_exec(TestBench* tb) {
   }
   BreakCode break_code = NoBreak;
   while (break_code == NoBreak) {
+    // BUG: the order of vcpu_tick/vcpu_subtick matters and breaks with this:
+    //  ./build_run.sh fast vcpu gold random 10000 100 all verbose 4 seed 17272793 delay 0 10
     vcpu_subtick(tb);
     vcpu_tick(tb);
     break_code = vcpu_break_code(tb);
@@ -711,7 +713,7 @@ bool compare_reg(uint64_t sim_time, const char* name, uint32_t r, uint32_t g) {
 
 bool compare_mem(uint64_t sim_time, uint32_t address, uint32_t r, uint32_t g) {
   if (r != g) {
-    printf("[FAILED] Test Failed at time %lu. 0x%x mismatch: r = %i vs g = %i\n", sim_time, address, r, g);
+    printf("[FAILED] Test Failed at time %lu. 0x%x mismatch: r = 0x%x vs g = 0x%x\n", sim_time, address, r, g);
     return false;
   }
   return true;
@@ -765,7 +767,7 @@ bool compare_vcpu_gold(TestBench* tb) {
     result &= memcmp(tb->gcpu->mem, tb->vcpu_cpu->mem, MEM_SIZE) == 0;
   }
   else {
-    if (tb->gcpu->is_mem_write) {
+    if (tb->gcpu->is_mem_write && tb->gcpu->written_address >= MEM_START && tb->gcpu->written_address <= MEM_END-3) {
       uint32_t address0 = tb->gcpu->written_address & ~3;
       uint32_t address4 = (tb->gcpu->written_address & ~3) + 4;
       uint32_t v = v_mem_read(tb,       address0);
@@ -775,7 +777,7 @@ bool compare_vcpu_gold(TestBench* tb) {
       g = g_mem_read(tb->gcpu, address4);
       result &= compare_mem(tb->vcpu_cycles, address4, v, g);
     }
-    if (tb->vcpu_cpu->is_mem_write) {
+    if (tb->vcpu_cpu->is_mem_write && tb->vcpu_cpu->written_address >= MEM_START && tb->vcpu_cpu->written_address <= MEM_END-3) {
       uint32_t address0 = tb->vcpu_cpu->written_address & ~3;
       uint32_t address4 = (tb->vcpu_cpu->written_address & ~3) + 4;
       uint32_t v = v_mem_read(tb,       address0);
@@ -1027,12 +1029,9 @@ bool test_bin(TestBench* tb) {
   tb->insts = (uint32_t*)data;
 
   bool is_success = test_instructions(tb);
-  // if (!is_success) {
-  //   for (uint32_t i = 0; i < tb->n_insts/20; i++) {
-  //     printf("[0x%08x] 0x%08x ", 4*i, tb->insts[i]);
-  //     print_instruction(tb->insts[i]);
-  //   }
-  // }
+  if (!is_success) {
+    print_all_instructions(tb);
+  }
   return is_success;
 }
 

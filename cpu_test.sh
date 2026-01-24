@@ -1,4 +1,4 @@
-CPU_TESTS=/home/bekzat/chip_bootcamp/am-kernels/tests/cpu-tests
+CPU_TESTS=am-kernels/tests/cpu-tests
 
 usage() {
   echo "Usage:"

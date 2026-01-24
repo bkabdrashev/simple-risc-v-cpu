@@ -1,4 +1,4 @@
-MICROBENCH_PATH=/home/bekzat/chip_bootcamp/am-kernels/benchmarks/microbench
+MICROBENCH_PATH=am-kernels/benchmarks/microbench
 
 usage() {
   echo "Usage:"

@@ -1,4 +1,4 @@
-RISCV_TESTS=/home/bekzat/chip_bootcamp/riscv-tests-am
+RISCV_TESTS=riscv-tests-am
 
 usage() {
   echo "Usage:"

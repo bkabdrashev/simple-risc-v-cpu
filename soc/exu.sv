@@ -24,18 +24,7 @@ module exu (
   input  logic [ALU_OP_END:0]    alu_op,
   input  logic [COM_OP_END:0]    com_op,
   input  logic [REG_W_END:0]     imm,
-  input  logic [INST_TYPE_END:0] inst_type,
-
-  output  logic is_ebreak,
-  output  logic is_instret,
-  output  logic is_ifu_wait,
-  output  logic is_lsu_wait,
-  output  logic is_load_seen,
-  output  logic is_store_seen,
-  output  logic is_calc_seen,
-  output  logic is_jump_seen,
-  output  logic is_branch_seen,
-  output  logic is_branch_taken);
+  input  logic [INST_TYPE_END:0] inst_type);
 
 /* verilator lint_off UNUSEDPARAM */
 `include "com_defines.vh"
@@ -57,10 +46,8 @@ module exu (
   always_ff @(posedge clock or posedge reset) begin
     if (reset) begin
       curr_state <= EXU_RESET;
-      is_ebreak  <= 1'b0;
     end else begin
       curr_state <= next_state;
-      is_ebreak  <= (inst_type == INST_EBREAK || is_ebreak) && (curr_state == EXU_EXECUTE);
     end
   end
 
@@ -77,16 +64,6 @@ module exu (
   assign lsu_wdata = rdata2;
   assign lsu_addr  = alu_res;
   assign rf_wen    = inst_type[3] & respValid;
-
-  assign is_instret      = respValid;
-  assign is_ifu_wait     = next_state == EXU_STALL_IDU;
-  assign is_lsu_wait     = next_state == EXU_STALL_LSU;
-  assign is_load_seen    = respValid & (inst_type[5:3] == INST_LOAD);
-  assign is_store_seen   = respValid & (inst_type[5:3] == INST_STORE);
-  assign is_calc_seen    = respValid & (inst_type[5:4] == INST_EXEC) & (inst_type[0] == INST_CALC);
-  assign is_jump_seen    = respValid & is_jump;
-  assign is_branch_seen  = respValid & is_branch;
-  assign is_branch_taken = respValid & is_branch_true;
 
   always_comb begin
     next_state = curr_state;
@@ -182,6 +159,51 @@ module exu (
   end
 
 `ifdef verilator
+logic is_ebreak;
+logic is_instret;
+logic is_ifu_wait;
+logic is_lsu_wait;
+logic is_load_seen;
+logic is_store_seen;
+logic is_calc_seen;
+logic is_jump_seen;
+logic is_branch_seen;
+logic is_branch_taken;
+
+assign is_ebreak       = (inst_type == INST_EBREAK) && (curr_state == EXU_EXECUTE);
+assign is_instret      = respValid;
+assign is_ifu_wait     = next_state == EXU_STALL_IDU;
+assign is_lsu_wait     = next_state == EXU_STALL_LSU;
+assign is_load_seen    = respValid & (inst_type[5:3] == INST_LOAD);
+assign is_store_seen   = respValid & (inst_type[5:3] == INST_STORE);
+assign is_calc_seen    = respValid & (inst_type[5:4] == INST_EXEC) & (inst_type[0] == INST_CALC);
+assign is_jump_seen    = respValid & is_jump;
+assign is_branch_seen  = respValid & is_branch;
+assign is_branch_taken = respValid & is_branch_true;
+
+import "DPI-C" context task exu_perf_measure(
+  input bit is_ebreak,
+  input bit is_instret,
+  input bit is_ifu_wait,
+  input bit is_lsu_wait,
+  input bit is_load_seen,
+  input bit is_store_seen,
+  input bit is_calc_seen,
+  input bit is_jump_seen,
+  input bit is_branch_seen,
+  input bit is_branch_taken);
+
+import "DPI-C" context task exu_perf_reset();
+
+always_ff @(posedge clock or posedge reset) begin
+  if (reset) begin
+    exu_perf_reset();
+  end
+  else begin
+    exu_perf_measure(is_ebreak, is_instret, is_ifu_wait, is_lsu_wait, is_load_seen, is_store_seen, is_calc_seen, is_jump_seen, is_branch_seen, is_branch_taken);
+  end
+end
+
 /* verilator lint_off UNUSEDSIGNAL */
 reg [103:0]  dbg_exu;
 always @ * begin

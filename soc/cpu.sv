@@ -80,17 +80,6 @@ start ------->|IFU|------->|IDU| -------> |LSU|
   logic               icache_hit;
   logic               icache_wen;
 
-  logic is_ebreak;
-  logic is_instret;
-  logic is_ifu_wait;
-  logic is_lsu_wait;
-  logic is_load_seen;
-  logic is_store_seen;
-  logic is_calc_seen;
-  logic is_jump_seen;
-  logic is_branch_seen;
-  logic is_branch_taken;
-
   pc u_pc(
     .clock(clock),
     .reset(reset),
@@ -157,6 +146,7 @@ start ------->|IFU|------->|IDU| -------> |LSU|
   csr u_csr(
     .clock(clock),
     .reset(reset),
+    .addr (idu_imm[11:0]),
     .rdata(csr_rdata));
 
   assign is_lsu_inst = idu_inst_type[4];
@@ -219,17 +209,7 @@ start ------->|IFU|------->|IDU| -------> |LSU|
     .alu_op   (idu_alu_op),
     .com_op   (idu_com_op),
     .imm      (idu_imm),
-    .inst_type(idu_inst_type),
-    .is_ebreak      (is_ebreak),
-    .is_instret     (is_instret),
-    .is_ifu_wait    (is_ifu_wait),
-    .is_lsu_wait    (is_lsu_wait),
-    .is_load_seen   (is_load_seen),
-    .is_store_seen  (is_store_seen),
-    .is_calc_seen   (is_calc_seen),
-    .is_jump_seen   (is_jump_seen),
-    .is_branch_seen (is_branch_seen),
-    .is_branch_taken(is_branch_taken));
+    .inst_type(idu_inst_type));
 
   logic is_start;
   always_ff @(posedge clock or posedge reset) begin

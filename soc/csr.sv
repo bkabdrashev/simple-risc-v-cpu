@@ -1,6 +1,7 @@
 module csr (
   input  logic               clock,
   input  logic               reset,
+  input  logic [11:0]        addr,
   output logic [REG_W_END:0] rdata);
 
 /* verilator lint_off UNUSEDPARAM */
@@ -15,14 +16,14 @@ module csr (
   localparam MVENDORID_VAL = "akeb";
   localparam MARCHID_VAL   = 32'h05318008; 
 
-  logic [63:0] mcycle,   mcycle_inc;
+  logic [63:0] mcycle;
 
   always_ff @(posedge clock or posedge reset) begin
     if (reset) begin
       mcycle <= 64'h0;
     end
     else begin
-      mcycle <= mcycle_inc;
+      mcycle <= mcycle + 1;
     end
   end
 
@@ -34,11 +35,6 @@ module csr (
       MCYCLEH:   rdata = mcycle[63:32];
       default:   rdata = 32'h0;
     endcase
-  end
-
-  always_comb begin
-    mcycle_inc = mcycle;
-    if (~is_ebreak)   mcycle_inc = mcycle + 1;
   end
 
 endmodule

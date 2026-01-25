@@ -7,6 +7,7 @@
 #include <random>
 #include <bitset>
 
+#include "svdpi.h"
 #include <verilated.h>
 #include <verilated_vcd_c.h>
 #include "VysyxSoCTop.h"
@@ -20,7 +21,6 @@
 typedef VysyxSoCTop VSoC;
 
 struct Vcpucpu {
-  uint8_t & ebreak;
   uint32_t& pc;
   VlUnpacked<uint32_t, 16>&  regs;
 
@@ -153,7 +153,6 @@ TestBench new_testbench(TestBenchConfig config) {
 
   tb.vsoc = new VSoC;
   tb.vsoc_cpu = new VSoCcpu{
-    .ebreak        = tb.vsoc->rootp->ysyxSoCTop__DOT__dut__DOT__asic__DOT__cpu__DOT__u_cpu__DOT__is_ebreak,
     .pc            = tb.vsoc->rootp->ysyxSoCTop__DOT__dut__DOT__asic__DOT__cpu__DOT__u_cpu__DOT__pc,
     .regs          = tb.vsoc->rootp->ysyxSoCTop__DOT__dut__DOT__asic__DOT__cpu__DOT__u_cpu__DOT__u_rf__DOT__regs,
     .mem           = tb.vsoc->rootp->ysyxSoCTop__DOT__dut__DOT__sdram__DOT__mem_ext__DOT__Memory,
@@ -178,36 +177,37 @@ TestBench new_testbench(TestBenchConfig config) {
     },
     .event_counts  = {
       .mcycle        = tb.vsoc->rootp->ysyxSoCTop__DOT__dut__DOT__asic__DOT__cpu__DOT__u_cpu__DOT__u_csr__DOT__mcycle,
-      .minstret      = tb.vsoc->rootp->ysyxSoCTop__DOT__dut__DOT__asic__DOT__cpu__DOT__u_cpu__DOT__u_csr__DOT__minstret,
-      .mifu_wait     = tb.vsoc->rootp->ysyxSoCTop__DOT__dut__DOT__asic__DOT__cpu__DOT__u_cpu__DOT__u_csr__DOT__mhpmcounter[0],
-      .mlsu_wait     = tb.vsoc->rootp->ysyxSoCTop__DOT__dut__DOT__asic__DOT__cpu__DOT__u_cpu__DOT__u_csr__DOT__mhpmcounter[1],
-      .mload_seen    = tb.vsoc->rootp->ysyxSoCTop__DOT__dut__DOT__asic__DOT__cpu__DOT__u_cpu__DOT__u_csr__DOT__mhpmcounter[2],
-      .mstore_seen   = tb.vsoc->rootp->ysyxSoCTop__DOT__dut__DOT__asic__DOT__cpu__DOT__u_cpu__DOT__u_csr__DOT__mhpmcounter[3],
-      .mcalc_seen    = tb.vsoc->rootp->ysyxSoCTop__DOT__dut__DOT__asic__DOT__cpu__DOT__u_cpu__DOT__u_csr__DOT__mhpmcounter[4],
-      .mjump_seen    = tb.vsoc->rootp->ysyxSoCTop__DOT__dut__DOT__asic__DOT__cpu__DOT__u_cpu__DOT__u_csr__DOT__mhpmcounter[5],
-      .mbranch_seen  = tb.vsoc->rootp->ysyxSoCTop__DOT__dut__DOT__asic__DOT__cpu__DOT__u_cpu__DOT__u_csr__DOT__mhpmcounter[6],
-      .mbranch_taken = tb.vsoc->rootp->ysyxSoCTop__DOT__dut__DOT__asic__DOT__cpu__DOT__u_cpu__DOT__u_csr__DOT__mhpmcounter[7],
+      .ebreak        = 0,
+      .minstret      = 0,
+      .mifu_wait     = 0,
+      .mlsu_wait     = 0,
+      .mload_seen    = 0,
+      .mstore_seen   = 0,
+      .mcalc_seen    = 0,
+      .mjump_seen    = 0,
+      .mbranch_seen  = 0,
+      .mbranch_taken = 0,
     },
   };
 
   tb.vcpu = new Vcpu;
   tb.vcpu_cpu = new Vcpucpu {
-    .ebreak        = tb.vcpu->rootp->cpu__DOT__is_ebreak,
     .pc            = tb.vcpu->rootp->cpu__DOT__pc,
     .regs          = tb.vcpu->rootp->cpu__DOT__u_rf__DOT__regs,
     .is_mem_write    = false,
     .written_address = 0,
     .event_counts  = {
       .mcycle          = tb.vcpu->rootp->cpu__DOT__u_csr__DOT__mcycle,
-      .minstret        = tb.vcpu->rootp->cpu__DOT__u_csr__DOT__minstret,
-      .mifu_wait       = tb.vcpu->rootp->cpu__DOT__u_csr__DOT__mhpmcounter[0],
-      .mlsu_wait       = tb.vcpu->rootp->cpu__DOT__u_csr__DOT__mhpmcounter[1],
-      .mload_seen      = tb.vcpu->rootp->cpu__DOT__u_csr__DOT__mhpmcounter[2],
-      .mstore_seen     = tb.vcpu->rootp->cpu__DOT__u_csr__DOT__mhpmcounter[3],
-      .mcalc_seen      = tb.vcpu->rootp->cpu__DOT__u_csr__DOT__mhpmcounter[4],
-      .mjump_seen      = tb.vcpu->rootp->cpu__DOT__u_csr__DOT__mhpmcounter[5],
-      .mbranch_seen    = tb.vcpu->rootp->cpu__DOT__u_csr__DOT__mhpmcounter[6],
-      .mbranch_taken   = tb.vcpu->rootp->cpu__DOT__u_csr__DOT__mhpmcounter[7],
+      .ebreak          = 0,
+      .minstret        = 0,
+      .mifu_wait       = 0,
+      .mlsu_wait       = 0,
+      .mload_seen      = 0,
+      .mstore_seen     = 0,
+      .mcalc_seen      = 0,
+      .mjump_seen      = 0,
+      .mbranch_seen    = 0,
+      .mbranch_taken   = 0,
     },
   };
 
@@ -381,6 +381,50 @@ extern "C" void flash_read(int32_t addr, int32_t* data) {
       vsoc_flash[addr + 1] <<  8 | vsoc_flash[addr + 0] <<  0 ;
 }
 
+static TestBench* dpi_testbench;
+void dpi_init(TestBench* tb) {
+  dpi_testbench = tb;
+}
+void dpi_clear() {
+  dpi_testbench = NULL;
+}
+
+extern "C" void exu_perf_reset() {
+  dpi_testbench->vsoc_cpu->event_counts.ebreak        = 0;
+  dpi_testbench->vsoc_cpu->event_counts.mcycle        = 0;
+  dpi_testbench->vsoc_cpu->event_counts.minstret      = 0;
+  dpi_testbench->vsoc_cpu->event_counts.mifu_wait     = 0;
+  dpi_testbench->vsoc_cpu->event_counts.mlsu_wait     = 0;
+  dpi_testbench->vsoc_cpu->event_counts.mload_seen    = 0;
+  dpi_testbench->vsoc_cpu->event_counts.mstore_seen   = 0;
+  dpi_testbench->vsoc_cpu->event_counts.mcalc_seen    = 0;
+  dpi_testbench->vsoc_cpu->event_counts.mjump_seen    = 0;
+  dpi_testbench->vsoc_cpu->event_counts.mbranch_seen  = 0;
+  dpi_testbench->vsoc_cpu->event_counts.mbranch_taken = 0;
+}
+
+extern "C" void exu_perf_measure(svBit is_ebreak,
+                                 svBit is_instret,
+                                 svBit is_ifu_wait,
+                                 svBit is_lsu_wait,
+                                 svBit is_load_seen,
+                                 svBit is_store_seen,
+                                 svBit is_calc_seen,
+                                 svBit is_jump_seen,
+                                 svBit is_branch_seen,
+                                 svBit is_branch_taken) {
+  if (is_ebreak)       dpi_testbench->vsoc_cpu->event_counts.ebreak        = 1;
+  if (is_instret)      dpi_testbench->vsoc_cpu->event_counts.minstret      += 1;
+  if (is_ifu_wait)     dpi_testbench->vsoc_cpu->event_counts.mifu_wait     += 1;
+  if (is_lsu_wait)     dpi_testbench->vsoc_cpu->event_counts.mlsu_wait     += 1;
+  if (is_load_seen)    dpi_testbench->vsoc_cpu->event_counts.mload_seen    += 1;
+  if (is_store_seen)   dpi_testbench->vsoc_cpu->event_counts.mstore_seen   += 1;
+  if (is_calc_seen)    dpi_testbench->vsoc_cpu->event_counts.mcalc_seen    += 1;
+  if (is_jump_seen)    dpi_testbench->vsoc_cpu->event_counts.mjump_seen    += 1;
+  if (is_branch_seen)  dpi_testbench->vsoc_cpu->event_counts.mbranch_seen  += 1;
+  if (is_branch_taken) dpi_testbench->vsoc_cpu->event_counts.mbranch_taken += 1;
+}
+
 void vsoc_flash_init(uint8_t* data, uint32_t size) {
   for (uint32_t i = 0; i < size; i++) {
     vsoc_flash[i] = data[i];
@@ -439,7 +483,7 @@ void vsoc_fetch_exec(TestBench* tb) {
   while (1) {
     vsoc_cycle(tb);
     if (tb->max_cycles && tb->vsoc_cycles >= tb->max_cycles) break;
-    if (tb->vsoc_cpu->ebreak) break;
+    if (tb->vsoc_cpu->event_counts.ebreak) break;
     if (tb->vsoc_cpu->event_counts.minstret != tb->vsoc_cpu->minstret_start) break;
   }
   if (tb->verbose >= VerboseInfo5) {
@@ -628,7 +672,7 @@ enum BreakCode {
 BreakCode vcpu_break_code(TestBench* tb) {
   BreakCode break_code = NoBreak;
   if (tb->max_cycles && tb->vcpu_cycles >= tb->max_cycles)    break_code = Timeout;
-  if (tb->vcpu_cpu->ebreak)                                   break_code = Ebreak;
+  if (tb->vcpu_cpu->event_counts.ebreak)                                   break_code = Ebreak;
   if (tb->vcpu_cpu->event_counts.minstret != tb->vcpu_cpu->minstret_start) break_code = InstRet;
   return break_code;
 }
@@ -743,7 +787,7 @@ bool compare_mem(uint64_t sim_time, uint32_t address, uint32_t r, uint32_t g) {
 
 bool compare_vsoc_gold(TestBench* tb) {
   bool result = true;
-  result &= compare_reg(tb->vsoc_cycles, "vsoc.ebreak  ",   tb->vsoc_cpu->ebreak,   tb->gcpu->ebreak);
+  result &= compare_reg(tb->vsoc_cycles, "vsoc.ebreak  ",   tb->vsoc_cpu->event_counts.ebreak,   tb->gcpu->ebreak);
   result &= compare_reg(tb->vsoc_cycles, "vsoc.pc      ",   tb->vsoc_cpu->pc,       tb->gcpu->pc);
   for (uint32_t i = 0; i < N_REGS; i++) {
     char digit0 = i%10 + '0';
@@ -777,7 +821,7 @@ bool compare_vsoc_gold(TestBench* tb) {
 
 bool compare_vcpu_gold(TestBench* tb) {
   bool result = true;
-  result &= compare_reg(tb->vcpu_cycles, "vcpu.ebreak  ",   tb->vcpu_cpu->ebreak,   tb->gcpu->ebreak);
+  result &= compare_reg(tb->vcpu_cycles, "vcpu.ebreak  ",   tb->vcpu_cpu->event_counts.ebreak,   tb->gcpu->ebreak);
   result &= compare_reg(tb->vcpu_cycles, "vcpu.pc      ",   tb->vcpu_cpu->pc,       tb->gcpu->pc);
   for (uint32_t i = 0; i < N_REGS; i++) {
     char digit0 = i%10 + '0';
@@ -822,7 +866,7 @@ bool compare_vcpu_gold(TestBench* tb) {
 
 bool compare_vcpu_vsoc(TestBench* tb) {
   bool result = true;
-  result &= compare_reg(tb->vsoc_cycles, "ebreak  ",   tb->vcpu_cpu->ebreak,   tb->vsoc_cpu->ebreak);
+  result &= compare_reg(tb->vsoc_cycles, "ebreak  ",   tb->vcpu_cpu->event_counts.ebreak,   tb->vsoc_cpu->event_counts.ebreak);
   result &= compare_reg(tb->vsoc_cycles, "pc      ",   tb->vcpu_cpu->pc,       tb->vsoc_cpu->pc);
   for (uint32_t i = 0; i < N_REGS; i++) {
     char digit0 = i%10 + '0';
@@ -925,7 +969,7 @@ bool test_instructions(TestBench* tb) {
 
     if (tb->is_vsoc) {
       vsoc_fetch_exec(tb);
-      if (tb->vsoc_cpu->ebreak) {
+      if (tb->vsoc_cpu->event_counts.ebreak) {
         if (tb->verbose >= VerboseInfo4) {
           printf("[INFO] vsoc ebreak\n");
         }
@@ -943,7 +987,7 @@ bool test_instructions(TestBench* tb) {
 
     if (tb->is_vcpu) {
       vcpu_fetch_exec(tb);
-      if (tb->vcpu_cpu->ebreak) {
+      if (tb->vcpu_cpu->event_counts.ebreak) {
         if (tb->verbose >= VerboseInfo4) {
           printf("[INFO] vcpu ebreak\n");
         }
@@ -1015,8 +1059,8 @@ bool test_instructions(TestBench* tb) {
       break;
     }
 
-    if ((!tb->is_vsoc || tb->vsoc_cpu->ebreak) &&
-        (!tb->is_vcpu || tb->vcpu_cpu->ebreak) &&
+    if ((!tb->is_vsoc || tb->vsoc_cpu->event_counts.ebreak) &&
+        (!tb->is_vcpu || tb->vcpu_cpu->event_counts.ebreak) &&
         (!tb->is_gold || tb->gcpu->ebreak)) {
       break;
     }
@@ -1050,7 +1094,7 @@ bool test_instructions(TestBench* tb) {
     print_finished_stat(tb, "vsoc", tb->vsoc_cpu->event_counts);
   }
   if (tb->is_vcpu) {
-    print_finished_stat(tb, "vcpu", tb->vcpu_cpu->event_counts);
+    // print_finished_stat(tb, "vcpu", tb->vcpu_cpu->event_counts);
   }
   return is_test_success;
 }
@@ -1320,6 +1364,7 @@ int main(int argc, char** argv, char** env) {
       }
     }
     TestBench tb = new_testbench(config);
+    dpi_init(&tb);
 
     if (tb.is_bin && tb.is_random) {
       printf("[WARNING] bin test and random test together are not supported: doing only bin test\n");
@@ -1346,6 +1391,7 @@ int main(int argc, char** argv, char** env) {
       goto cleanup_label;
     }
 cleanup_label:
+    dpi_clear();
     delete_testbench(tb);
   }
   

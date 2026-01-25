@@ -1,2 +1,2 @@
-git,date,notes,freq,area,power,instrets,cycles,ifu wait,lsu wait,load seen,store seen,calc seen,csr seen,jump seen,branch seen,branch taken,access time,hit rate,miss penalty
-9580d915f240c13098ed44ea4a3d68663745b4c7,2026-01-24T15:02:32,text,473.630,21712.040000,6.998e+00,202436413,4407857307,3100050610,1105370283,16381975,7367825,121593339,4180020,52913184,38588652,-,-,-
+git,date,notes,freq,area,power,instrets,cycles,ifu wait,lsu wait,load seen,store seen,calc seen,csr seen,jump seen,branch seen,branch taken,icache misses,icache hits,
+9580d915f240c13098ed44ea4a3d68663745b4c7,2026-01-24T15:02:32,text,473.630,21712.040000,6.998e+00,202436413,4407857307,3100050610,1105370283,16381975,7367825,121593339,4180020,52913184,38588652,-,-
